@@ -42,6 +42,7 @@ final class IconView extends View {
         }
         else if (kind.equals("down")) { path(canvas, 5, 9, 12, 16, 19, 9); }
         else if (kind.equals("back")) { path(canvas, 15, 5, 8, 12, 15, 19); }
+        else if (kind.equals("arrow-right")) { line(canvas, 4, 12, 20, 12); path(canvas, 14, 6, 20, 12, 14, 18); }
         else if (kind.equals("plus")) { line(canvas, 12, 4, 12, 20); line(canvas, 4, 12, 20, 12); }
         else if (kind.equals("more")) { paint.setStyle(Paint.Style.FILL); canvas.drawCircle(5, 12, 1.5f, paint); canvas.drawCircle(12, 12, 1.5f, paint); canvas.drawCircle(19, 12, 1.5f, paint); }
         else if (kind.equals("clock")) { canvas.drawCircle(12, 12, 8, paint); path(canvas, 12, 7, 12, 12, 16, 14); }

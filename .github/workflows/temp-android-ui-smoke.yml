@@ -22,6 +22,26 @@ jobs:
       - name: Assemble debug APK
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+      - name: Probe live YouTube Music (informational)
+        working-directory: android
+        env:
+          FT_LIVE_TESTS: '1'
+        run: |
+          set +e
+          ./gradlew --no-daemon testDebugUnitTest --tests com.ftmusic.app.YouTubeLiveJUnitTest --rerun-tasks > "$RUNNER_TEMP/ft-live-log.txt" 2>&1
+          result=$?
+          set -e
+          python3 - "$result" > "$RUNNER_TEMP/ft-live-results.txt" <<'PY'
+          import pathlib, sys, xml.etree.ElementTree as ET
+          print('Gradle exit:', sys.argv[1])
+          for file in pathlib.Path('app/build/test-results/testDebugUnitTest').glob('TEST-*YouTubeLiveJUnitTest.xml'):
+              root = ET.parse(file).getroot()
+              for case in root.findall('testcase'):
+                  failure = case.find('failure')
+                  skipped = case.find('skipped')
+                  print(case.get('name'), ':', 'FAILED ' + failure.get('message', '') if failure is not None else 'SKIPPED' if skipped is not None else 'PASSED')
+          PY
+          cat "$RUNNER_TEMP/ft-live-results.txt"
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -45,7 +65,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for screenshot in "$RUNNER_TEMP"/ft-ui/*.png "$RUNNER_TEMP"/ft-ui/*.xml "$RUNNER_TEMP"/ft-ui/*.txt "$RUNNER_TEMP"/ft-ui-log.txt; do
+          for screenshot in "$RUNNER_TEMP"/ft-ui/*.png "$RUNNER_TEMP"/ft-ui/*.xml "$RUNNER_TEMP"/ft-ui/*.txt "$RUNNER_TEMP"/ft-ui-log.txt "$RUNNER_TEMP"/ft-live-results.txt; do
             [[ -f "$screenshot" ]] || continue
             name=$(basename "$screenshot" | tr '[:lower:].-' '[:upper:]__')
             python3 - "$screenshot" > "$RUNNER_TEMP/blob.json" <<'PY'

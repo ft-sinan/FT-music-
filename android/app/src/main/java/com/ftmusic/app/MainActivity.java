@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -642,7 +643,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
         final EditText input = new EditText(this); input.setSingleLine(true); input.setTextSize(14); input.setTextColor(INK); input.setHintTextColor(MUTED); input.setHint("Song, artist, or video link");
         input.setBackgroundColor(Color.TRANSPARENT); input.setImeOptions(EditorInfo.IME_ACTION_SEARCH); input.setText(searchQuery); padding(input, 10, 0, 4, 0);
         search.addView(input, new LinearLayout.LayoutParams(0, dp(52), 1));
-        search.addView(iconButton("next", "Search YouTube Music", WHITE, Color.argb(70, 255, 255, 255), 38, new Runnable() { @Override public void run() { runSearch(input); } }), new LinearLayout.LayoutParams(dp(38), dp(38)));
+        search.addView(iconButton("arrow-right", "Search YouTube Music", WHITE, Color.argb(70, 255, 255, 255), 38, new Runnable() { @Override public void run() { runSearch(input); } }), new LinearLayout.LayoutParams(dp(38), dp(38)));
         content.addView(search, new LinearLayout.LayoutParams(-1, dp(56)));
         TextView disclaimer = text("Search and playback use an unofficial, experimental YouTube Music connection. No Google sign-in is required.", 11, MUTED, false);
         padding(disclaimer, 2, 11, 2, 0); content.addView(disclaimer); addGap(content, 22);
@@ -931,6 +932,14 @@ public final class MainActivity extends Activity implements PlaybackService.List
         miniPlay.setKind(playback.isPlaying() ? "pause" : "play");
         View parent = (View) miniPlay.getParent(); parent.setContentDescription(playback.isPlaying() ? "Pause" : "Play");
     }
+    private int[] artworkColors(Bitmap bitmap) {
+        int width = bitmap.getWidth(), height = bitmap.getHeight();
+        int[] samples = new int[64];
+        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++) {
+            samples[y * 8 + x] = bitmap.getPixel(Math.min(width - 1, (x * width + width / 2) / 8), Math.min(height - 1, (y * height + height / 2) / 8));
+        }
+        return ArtworkTint.fromPixels(samples);
+    }
     private int[] colorsFor(Song song) {
         String art = song.artwork.toLowerCase(Locale.ROOT);
         if (art.contains("night") || art.contains("electric")) return new int[] {Color.rgb(54, 47, 91), Color.rgb(25, 25, 42)};
@@ -1009,8 +1018,15 @@ public final class MainActivity extends Activity implements PlaybackService.List
         Song song = playback.current();
         if (song == null) return;
         if (!song.id.equals(displayedPlayerId)) {
-            displayedPlayerId = song.id; artwork.show(playerCover, song.artwork);
+            displayedPlayerId = song.id;
             int[] colors = colorsFor(song); playerRoot.setBackground(gradient(colors[0], colors[1], 0));
+            final String songId = song.id;
+            artwork.show(playerCover, song.artwork, new ArtworkLoader.Listener() {
+                @Override public void onArtwork(Bitmap bitmap) {
+                    if (playerRoot == null || playerDialog == null || !playerDialog.isShowing() || !songId.equals(displayedPlayerId)) return;
+                    int[] tint = artworkColors(bitmap); playerRoot.setBackground(gradient(tint[0], tint[1], 0));
+                }
+            });
         }
         playerTitle.setText(song.title); playerArtist.setText(playback.isBuffering() ? "Buffering…" : song.artist);
         playerSource.setText(song.isYouTube() ? (downloads.fileFor(song) != null ? "OFFLINE DOWNLOAD" : "YOUTUBE MUSIC · EXPERIMENTAL") : "FROM YOUR COLLECTION");

@@ -111,6 +111,11 @@ public final class NativeCoreTest {
         check(queue.current().id.equals("blue-skies") && queue.items().size() == 3, "shuffle preserves current track");
         check(queue.select(2) && !queue.next(), "no next beyond end");
         check(!queue.select(9), "reject out-of-range queue index");
+        int[] redTint = ArtworkTint.fromPixels(new int[] {0xffff0000, 0xffff0000, 0x00ffffff});
+        check(((redTint[0] >>> 16) & 255) > ((redTint[0] >>> 8) & 255), "artwork colors retain their dominant hue");
+        int[] whiteTint = ArtworkTint.fromPixels(new int[] {0xffffffff});
+        check(((whiteTint[0] >>> 16) & 255) <= 106 && (whiteTint[1] & 255) < (whiteTint[0] & 255), "bright artwork still produces a dark readable gradient");
+        check(ArtworkTint.fromPixels(null).length == 2 && ArtworkTint.fromPixels(new int[] {0x00ffffff})[0] == 0xff5a405e, "empty or transparent art uses a safe fallback");
         List<LrcParser.Line> lrc = LrcParser.parse("[ar:Artist]\n[offset:-250]\n[00:03.1][00:01.25]Earlier\n[00:02.500]Second\n[00:99.00]Invalid\n[00:04.001]Last");
         check(lrc.size() == 4, "parse multi-timestamp and ignore metadata/invalid seconds");
         check(lrc.get(0).atMillis == 1000 && lrc.get(0).text.equals("Earlier"), "sort and apply LRC offset");
