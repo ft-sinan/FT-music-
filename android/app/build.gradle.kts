@@ -47,3 +47,9 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }
+
+// These standalone entry points are invoked by NativeCoreJUnitTest or a dedicated harness.
+// They are not JUnit test classes and must not be discovered as such by Gradle.
+tasks.withType<Test>().configureEach {
+    exclude("**/NativeCoreTest.class", "**/SyncIntegrationTest.class")
+}
