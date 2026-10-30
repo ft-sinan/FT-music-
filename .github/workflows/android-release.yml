@@ -1,0 +1,69 @@
+name: Publish Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Mark this release as a pre-release
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Only a repository owner/maintainer should run this on a reviewed commit.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - name: Install Android SDK
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Validate version against existing releases
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "ft-sinan/FT-music-" ]] || { echo 'The updater is pinned to the FT Music repository.' >&2; exit 1; }
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name' > "$RUNNER_TEMP/ft-existing-tags.txt"
+          VERSION=$(python3 android/scripts/release-version.py --existing-tags "$RUNNER_TEMP/ft-existing-tags.txt")
+          TAG="v$VERSION"
+          git ls-remote --tags origin "refs/tags/$TAG" > "$RUNNER_TEMP/ft-existing-tag-ref.txt"
+          [[ ! -s "$RUNNER_TEMP/ft-existing-tag-ref.txt" ]] || { echo "Tag $TAG already exists; refusing to use an unverified commit." >&2; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Test and build an unsigned release
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+      - name: Unseal and sign with the protected signing key
+        env:
+          FT_MUSIC_KEY_PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          KEY_DIR=$(mktemp -d "$RUNNER_TEMP/ft-signing.XXXXXXXX")
+          trap 'rm -rf "$KEY_DIR"' EXIT
+          android/scripts/unseal-signing.sh "$KEY_DIR"
+          android/scripts/sign-release.sh "$KEY_DIR/temp-key.pk8" "$KEY_DIR/temp-cert.der" "$RUNNER_TEMP/ft-release"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          APK="$RUNNER_TEMP/ft-release/FT-Music-$TAG.apk"
+          args=("$TAG" "$APK" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "FT Music $TAG" --notes-file .github/release-notes.md)
+          if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
+          gh release create "${args[@]}"
