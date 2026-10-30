@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Basic Android emulator smoke test. Requires adb and a built debug APK.
+"""Smoke test a separately signed FT Music APK on an unlocked emulator.
 
-Run from the repository root with an unlocked emulator: python3 android/tests/UiSmoke.py
-Screenshots go to $ANDROID_UI_OUTPUT or a temporary directory, never into the repo.
+Set FT_TEST_APK to the APK path and ANDROID_UI_OUTPUT to an output directory.
+This test does not enter credentials or verify YouTube account synchronization.
 """
 import os
-import pathlib
+from pathlib import Path
 import re
 import subprocess
 import tempfile
@@ -13,10 +13,10 @@ import time
 import traceback
 import xml.etree.ElementTree as ET
 
-APK = pathlib.Path("android/app/build/outputs/apk/debug/app-debug.apk")
+APK = Path(os.environ.get("FT_TEST_APK", ""))
 PACKAGE = "com.ftmusic.app"
-OUTPUT = pathlib.Path(os.environ.get("ANDROID_UI_OUTPUT") or tempfile.mkdtemp(prefix="ft-music-ui-"))
-OUTPUT.mkdir(parents=True, exist_ok=True)
+OUT = Path(os.environ.get("ANDROID_UI_OUTPUT") or tempfile.mkdtemp(prefix="ft-ui-"))
+OUT.mkdir(parents=True, exist_ok=True)
 
 
 def adb(*args, check=True):
@@ -24,126 +24,86 @@ def adb(*args, check=True):
 
 
 def dump():
-    # The first dump after launch can fail while the emulator is still settling. Remove the
-    # previous file so a failed dump cannot accidentally return stale screen contents.
     adb("shell", "rm", "-f", "/sdcard/ft-window.xml", check=False)
-    result = adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml")
-    if b"ERROR" in result.stdout:
+    result = adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml", check=False)
+    if result.returncode or b"ERROR" in result.stdout:
         raise RuntimeError(result.stdout.decode("utf-8", "replace"))
-    return adb("shell", "cat", "/sdcard/ft-window.xml").stdout.decode("utf-8", "replace")
+    text = adb("shell", "cat", "/sdcard/ft-window.xml").stdout.decode("utf-8", "replace")
+    return ET.fromstring(text[text.find("<?xml"):])
 
 
-def wait_for(needle, timeout=60):
-    deadline = time.monotonic() + timeout
-    last = ""
-    while time.monotonic() < deadline:
+def labels(tree):
+    return [value for node in tree.iter("node") for value in (node.get("text", ""), node.get("content-desc", "")) if value]
+
+
+def wait_for(label, timeout=120):
+    end = time.monotonic() + timeout
+    last = []
+    while time.monotonic() < end:
         try:
-            last = dump()
-            if needle in last:
-                return last
-        except (subprocess.CalledProcessError, RuntimeError) as error:
-            last = str(error)
-        time.sleep(0.5)
-    raise AssertionError(f"Could not find {needle!r} on screen. UI: {last[:8000]}")
+            tree = dump()
+            last = labels(tree)
+            if label in last:
+                return tree
+        except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
+            pass
+        time.sleep(1)
+    raise AssertionError(f"Could not find {label!r}; visible labels: {last[:80]}")
 
 
-def tap(label, attribute="content-desc"):
-    xml = wait_for(label)
-    root = ET.fromstring(xml[xml.find("<?xml"):])
-    for node in root.iter("node"):
-        if node.get(attribute) != label:
+def tap(label):
+    tree = wait_for(label)
+    for node in tree.iter("node"):
+        if label not in (node.get("text", ""), node.get("content-desc", "")):
             continue
-        numbers = [int(n) for n in re.findall(r"\d+", node.get("bounds", ""))]
-        if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
-            continue
-        adb("shell", "input", "tap", str((numbers[0] + numbers[2]) // 2), str((numbers[1] + numbers[3]) // 2))
-        return
-    raise AssertionError(f"No visible {attribute}={label!r} in UI")
+        bounds = [int(n) for n in re.findall(r"\d+", node.get("bounds", ""))]
+        if len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+            adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+            return
+    raise AssertionError(f"No tappable bounds for {label!r}")
 
 
-def screenshot(name):
-    result = adb("exec-out", "screencap", "-p")
-    (OUTPUT / f"{name}.png").write_bytes(result.stdout)
+def capture(name):
+    (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p").stdout)
+    (OUT / f"{name}.xml").write_text(ET.tostring(dump(), encoding="unicode"), encoding="utf-8")
 
 
 def main():
-    if not APK.exists():
-        raise SystemExit(f"Build a debug APK first: {APK}")
+    if not APK.is_file():
+        raise SystemExit("Set FT_TEST_APK to a signed APK built from this source")
+    adb("logcat", "-c", check=False)
     adb("install", "-r", str(APK))
     adb("shell", "pm", "clear", PACKAGE)
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS", check=False)
-    # This is an isolated emulator. Testing offline also exercises a useful empty/error state.
-    adb("shell", "svc", "wifi", "disable", check=False)
-    adb("shell", "svc", "data", "disable", check=False)
     try:
-        adb("shell", "am", "start", "-n", PACKAGE + "/.MainActivity")
-        home = wait_for("Listen Now")
-        if "Blue Skies" in home or "HoliznaCC0" in home or "Open now playing" in home:
-            raise AssertionError("Fresh Home must not display a preset demo song or mini-player")
-        screenshot("home")
-
-        tap("Explore")
-        wait_for("Chill")
-        screenshot("explore")
-        tap("Search")
-        search = wait_for("Find your next favorite")
-        if "Blue Skies" in search:
-            raise AssertionError("Empty search must not seed sample songs")
-        screenshot("search")
-
-        tap("Library")
-        wait_for("Check for updates")
-        screenshot("library")
-        tap("Home")
-        tap("Open queue")
-        wait_for("Your queue is empty")
-
-        # The samples remain accessible deliberately; a song appears only after explicit selection.
-        tap("Search")
-        tap("Song, artist, or video link", attribute="text")
-        adb("shell", "input", "text", "Blue%sSkies")
-        wait_for("Play Blue Skies")
-        adb("shell", "input", "keyevent", "4")  # hide keyboard
-        tap("Play Blue Skies")
-        wait_for("Open now playing")
-        wait_for('content-desc="Pause"')
-        tap("Pause")
-        tap("Home")
-        current_home = wait_for("Listen Now")
-        if 'content-desc="Play Blue Skies"' in current_home:
-            raise AssertionError("Bundled sample must not be promoted in Home recents")
-        tap("Open now playing")
-        wait_for("Close now playing")
-        wait_for("View queue")
-        wait_for("View lyrics")
-        screenshot("player")
-        tap("View lyrics", attribute="text")
-        wait_for("Import LRC")
-        tap("‹  Close", attribute="text")
-        wait_for("Close now playing")
+        adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity")
+        welcome = wait_for("Continue")
+        if "FT Music" not in labels(welcome):
+            raise AssertionError(f"FT Music branding not visible: {labels(welcome)}")
+        capture("welcome")
+        tap("Continue")
+        wait_for("Account")
+        capture("home")
+        tap("Account")
+        wait_for("Anonymous")
+        tap("Anonymous")
+        wait_for("Login")
+        # This checks that the provider's page loaded, without entering credentials.
+        wait_for("Sign in", timeout=60)
+        capture("login")
         if not adb("shell", "pidof", PACKAGE, check=False).stdout.strip():
-            raise AssertionError("FT Music process is not running")
-        print("Android UI smoke: Home, Explore, Search, Library, empty queue, playback, queue controls and lyrics passed")
-        print("Screenshots:", OUTPUT)
+            raise AssertionError("FT Music process exited unexpectedly")
+        print("FT Music smoke: install, launch, branding, home and YouTube login entry passed")
+        print("No Google credentials were entered; account sync was not tested.")
     except Exception:
         try:
-            screenshot("failure")
+            capture("failure")
         except Exception:
             pass
-        try:
-            (OUTPUT / "failure.xml").write_text(dump(), encoding="utf-8")
-        except Exception:
-            pass
-        try:
-            (OUTPUT / "logcat.txt").write_bytes(adb("logcat", "-d", "-s", "AndroidRuntime:E", check=False).stdout)
-        except Exception:
-            pass
+        (OUT / "logcat.txt").write_bytes(adb("logcat", "-d", "-s", "AndroidRuntime:E", check=False).stdout)
         message = traceback.format_exc()[:3500].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
-        print("::error title=Android UI smoke::" + message, flush=True)
+        print("::error title=FT Music emulator smoke::" + message, flush=True)
         raise
-    finally:
-        adb("shell", "svc", "wifi", "enable", check=False)
-        adb("shell", "svc", "data", "enable", check=False)
 
 
 if __name__ == "__main__":

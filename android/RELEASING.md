@@ -1,21 +1,32 @@
 # Releasing FT Music Android
 
-The app checks the public GitHub releases page and opens a matching release for the user to install; it does not install updates silently. Releases must use this repository, numeric `vMAJOR.MINOR.PATCH` tags, and an uploaded asset named `FT-Music-vMAJOR.MINOR.PATCH.apk`. Drafts and releases without that asset are not offered. Pre-releases are offered but clearly marked. The APK must keep application ID `com.ftmusic.app` and be signed by the existing FT Music key. Android enforces the signature and increasing version code during installation.
+This Android app is a modified [Echo Music](https://github.com/EchoMusicApp/Echo-Music) fork. It is distributed under GPLv3; preserve the upstream attribution and license in `UPSTREAM.md` and `LICENSE`, and make the exact corresponding source and notices available for each APK release. **The Echo-based build and release workflow must be verified before publishing.**
+
+## Updates and library compatibility
+
+The app's **Settings → Updates** opens FT Music's GitHub releases page in the browser; it does not silently download or install an update. Pre-releases are visible there. Android enforces the application ID (`com.ftmusic.app`), signing certificate and increasing version code when installing over an earlier release. Replacing v0.4 with the Echo-based app does not import the old likes, playlists, history, downloads, lyrics or separate FT account. The old private files are not intentionally deleted during an in-place update but are not read by the new app. Warn users to back up anything important; do not claim migration.
 
 ## Signing-key safety
 
-The certificate SHA-256 fingerprint is pinned in `signing-cert-sha256.txt`; `scripts/sign-release.sh` refuses to sign with a different certificate. The **plaintext private key is never in this repository** and must never be committed, attached unencrypted to a release, logged, or pasted into chat.
+The existing FT Music certificate SHA-256 is pinned in `signing-cert-sha256.txt`; `scripts/sign-release.sh` refuses to sign with a different certificate or the wrong package/version. The **plaintext private key must never be committed, logged, attached unencrypted to a release or pasted into chat**.
 
-The public repository contains an AES-256/GnuPG-encrypted key backup at `.github/ft-music-signing-bundle.tar.gz.gpg`. It is encrypted with a long randomly generated passphrase stored separately as the repository's `FT_MUSIC_KEY_PASSPHRASE` Actions secret. Anyone can download the ciphertext; its security depends on the passphrase remaining strong and secret. GitHub does not let you retrieve a saved secret. The owner must keep the passphrase in a secure independent password manager or offline backup. If both the GitHub secret and the passphrase backup are lost, the signing key cannot be recovered and future APKs cannot update existing installs in place.
+The public repository contains an AES-256/GnuPG-encrypted backup at `.github/ft-music-signing-bundle.tar.gz.gpg`, protected by the `FT_MUSIC_KEY_PASSPHRASE` Actions secret. Anyone can download the ciphertext; its security depends on the passphrase remaining strong and secret. GitHub cannot reveal a saved secret. Keep the passphrase in a secure independent password manager or offline backup. Losing both the secret and its independent backup prevents future in-place updates.
 
-Repository administrators and workflows with access to the secret can use the key, so restrict write and workflow permissions. To make an offline backup, save a copy of the encrypted `.gpg` file and the passphrase separately in secure storage. If you need to decrypt it locally for manual signing, run `gpg --output signing-bundle.tar.gz --decrypt .github/ft-music-signing-bundle.tar.gz.gpg` from a trusted computer, entering the passphrase only into GnuPG's prompt. Keep the decrypted key files private, delete temporary copies securely, and never commit them.
+Only reviewed workflows should ever access the secret. The release workflow builds without the passphrase, then signs the resulting artifact in a **separate fresh runner**. Gradle and its third-party plugins do not run on the signing runner. Review the scripts and workflow on `main` before dispatching it; never release from an untrusted branch. For offline recovery, decrypt the encrypted backup only on a trusted computer, keep the output private and securely delete temporary key material afterward.
 
-## Normal release
+## Normal release (after verification)
 
-1. Review and test the Android app on real devices and with live providers. This prototype has not yet had that verification. Review public release notes and legal/provider terms.
-2. Increase `versionName` in `version.properties`. The Android build computes `major × 1,000,000 + minor × 1,000 + patch`; major is at most 2099 and minor/patch at most 999. Every published release must increase this number. For example `0.3.0` is version code `3000`, and `0.3.1` is `3001`.
-3. Commit and push the change to the reviewed release branch. The workflow must exist on the default branch for GitHub's manual workflow-dispatch UI to offer it; merge the release workflow through the normal review process first.
-4. In GitHub Actions, run **Publish Android release** on the reviewed commit. Leave **pre-release** enabled for unverified builds. It checks existing release versions, runs the native unit test and Gradle release build, decrypts the key only in the ephemeral runner, verifies the pinned certificate, signs the APK, and creates the tag and GitHub Release. The workflow requires `contents: write` and permission to use Actions secrets. Do not run a workflow from an untrusted branch while exposing the passphrase.
-5. Confirm the release asset, tag, application ID, version and certificate; install over the previous version on a real device to verify update behavior before calling it stable.
+1. Test the app on real devices, including upgrade installation, YouTube sign-in/sync, playback and downloads. Review the GPL source/notice requirements and third-party terms. No such physical-device verification has yet been completed for this fork.
+2. Increase `versionName` in `version.properties`. The build computes `major × 1,000,000 + minor × 1,000 + patch` as the Android version code. Published versions must increase; for example `0.5.0` has code `5000`.
+3. Review and merge the release commit to `main`. Confirm `.github/release-notes.md` is accurate and discloses the fresh library and unverified features.
+4. Run **Publish Android release** on the reviewed `main` commit, using pre-release status for unverified builds. It tests and builds the universal GMS APK in an unprivileged job, transfers the unsigned artifact to a fresh job, verifies the pinned certificate and APK identity, signs, then publishes the release. It rejects duplicate version tags.
+5. Verify the tag points at the reviewed source, the `FT-Music-vMAJOR.MINOR.PATCH.apk` asset is present, and Android package/version/certificate match. Install over the previous release on a physical device before calling it stable.
 
-For manual signing after `cd android && ./gradlew testDebugUnitTest assembleRelease`, run `android/scripts/sign-release.sh /private/path/temp-key.pk8 /private/path/temp-cert.der /private/output` from the repository root with Android SDK build-tools 35.0.0 installed. It checks the APK package/version and certificate, aligns, signs and verifies the output. Do not commit the generated APK or private files.
+For manual builds, use JDK 21, Android SDK Platform 37.0, NDK `28.2.13676358` and CMake `3.22.1`:
+
+```bash
+cd android
+./gradlew testUniversalGmsDebugUnitTest assembleUniversalGmsRelease
+```
+
+From the repository root, run `android/scripts/sign-release.sh /private/path/temp-key.pk8 /private/path/temp-cert.der /private/output` with Android SDK build-tools 35.0.0 installed. The script signs exactly one unsigned universal GMS output, or the file specified by `FT_UNSIGNED_APK`, and verifies package, version, certificate, alignment and signature. Never commit the key or APK.

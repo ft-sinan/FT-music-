@@ -28,3 +28,6 @@ signing-bundle*
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Optional FT-owned Firebase configuration (never use Echo’s project).
+android/app/google-services.json
