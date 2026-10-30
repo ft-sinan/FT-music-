@@ -1,0 +1,241 @@
+# One-time v0.5 staging, approved by the repository owner. Remove after use.
+name: Temporary signed upgrade verification
+on:
+  push:
+    branches: [arena/3c1c13cb-ft-music]
+    paths: [.github/workflows/temp-signed-upgrade.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sign:
+    if: github.repository == 'ft-sinan/FT-music-' && github.ref == 'refs/heads/arena/3c1c13cb-ft-music'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # This runner does not execute Gradle or imported app code. Both source and
+      # the previously tested unsigned APK are pinned to reviewed commits/runs.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 7ebf239e5b3aa56163cd5952a9cb2488317e3f86
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-music-unsigned-apk
+          path: ${{ runner.temp }}/ft-unsigned
+          run-id: 41050504310
+          github-token: ${{ github.token }}
+      - name: Sign the verified APK with the established certificate
+        env:
+          FT_MUSIC_KEY_PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find "$RUNNER_TEMP/ft-unsigned" -maxdepth 1 -name '*-unsigned.apk' -type f)
+          [[ ${#FILES[@]} == 1 ]]
+          export FT_UNSIGNED_APK="${FILES[0]}"
+          umask 077
+          KEY_DIR=$(mktemp -d "$RUNNER_TEMP/ft-signing.XXXXXXXX")
+          trap 'rm -rf "$KEY_DIR"' EXIT
+          android/scripts/unseal-signing.sh "$KEY_DIR"
+          android/scripts/sign-release.sh "$KEY_DIR/temp-key.pk8" "$KEY_DIR/temp-cert.der" "$RUNNER_TEMP/ft-signed"
+          sha=$(sha256sum "$RUNNER_TEMP/ft-signed/FT-Music-v0.5.0.apk" | cut -d' ' -f1)
+          echo "::notice title=SIGNED_APK_SHA256::$sha"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ft-v0.5.0-signed
+          path: ${{ runner.temp }}/ft-signed/FT-Music-v0.5.0.apk
+          if-no-files-found: error
+          retention-days: 3
+
+  upgrade:
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 7ebf239e5b3aa56163cd5952a9cb2488317e3f86
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-v0.5.0-signed
+          path: ${{ runner.temp }}/new
+      - name: Fetch and verify the previously published APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/old"
+          gh release download v0.4.0 --repo "$GITHUB_REPOSITORY" --pattern 'FT-Music-v0.4.0.apk' --dir "$RUNNER_TEMP/old"
+          echo '8c92314314fdb527b4d625405d82a8b62fe4cffa1d343e8b9a41d0d8280eec2f  '"$RUNNER_TEMP/old/FT-Music-v0.4.0.apk" | sha256sum -c -
+          expected=$(tr -d '[:space:]' < android/signing-cert-sha256.txt)
+          for apk in "$RUNNER_TEMP/old/FT-Music-v0.4.0.apk" "$RUNNER_TEMP/new/FT-Music-v0.5.0.apk"; do
+            cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            [[ "$cert" == "$expected" ]] || { echo 'APK signing certificate mismatch.' >&2; exit 1; }
+          done
+      - name: Prepare the in-place upgrade smoke test
+        run: |
+          cat > "$RUNNER_TEMP/ft-upgrade.py" <<'PY'
+          import os, re, sys, time, traceback
+          from pathlib import Path
+          sys.path.insert(0, 'android/tests')
+          from UiSmoke import OUT, PACKAGE, adb, capture, labels, tap, wait_for
+
+          old = Path(os.environ['RUNNER_TEMP']) / 'old/FT-Music-v0.4.0.apk'
+          new = Path(os.environ['RUNNER_TEMP']) / 'new/FT-Music-v0.5.0.apk'
+          legacy = '/data/user/0/com.ftmusic.app/shared_prefs/ft_music_library.xml'
+          marker = 'FT_Upgrade_Probe'
+          try:
+              adb('install', str(old))
+              adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS', check=False)
+              adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/.MainActivity')
+              wait_for('Library', timeout=120)
+              tap('Library')
+              tap('Playlists')
+              tap('Create playlist')
+              tree = wait_for('Create a playlist')
+              for node in tree.iter('node'):
+                  if node.get('class', '').endswith('EditText'):
+                      box = [int(x) for x in re.findall(r'\d+', node.get('bounds', ''))]
+                      if len(box) == 4:
+                          adb('shell', 'input', 'tap', str((box[0]+box[2])//2), str((box[1]+box[3])//2))
+                          break
+              else:
+                  raise AssertionError('The old playlist name field was not found')
+              adb('shell', 'input', 'text', marker)
+              tap('Create')
+              wait_for(marker)
+              capture('old-playlist')
+              adb('shell', 'am', 'force-stop', PACKAGE)
+              time.sleep(2)
+              root = adb('root', check=False)
+              adb('wait-for-device')
+              time.sleep(2)
+              before_result = adb('shell', 'cat', legacy, check=False)
+              before = before_result.stdout if before_result.returncode == 0 else None
+              if before is not None and marker.encode() not in before:
+                  raise AssertionError('The synthetic old playlist was not persisted')
+              adb('install', '-r', str(new))
+              info = adb('shell', 'dumpsys', 'package', PACKAGE).stdout.decode('utf-8', 'replace')
+              if not re.search(r'versionCode=5000\b', info):
+                  raise AssertionError('The upgrade did not install version code 5000')
+              adb('shell', 'am', 'start', '-W', '-n', PACKAGE + '/echo.music.iad1tya.MainActivity')
+              welcome = wait_for('Continue', timeout=120)
+              if 'FT Music' not in labels(welcome):
+                  raise AssertionError('The upgraded app did not show FT Music branding')
+              capture('upgraded-welcome')
+              tap('Continue')
+              wait_for('Account', timeout=120)
+              capture('upgraded-home')
+              tap('Library')
+              tap('Playlists')
+              time.sleep(3)
+              tree = wait_for('Playlists', timeout=60)
+              if marker in labels(tree):
+                  raise AssertionError('The old FT playlist unexpectedly appeared in the fresh library')
+              capture('upgraded-playlists')
+              if before is not None:
+                  after = adb('shell', 'cat', legacy).stdout
+                  if after != before:
+                      raise AssertionError('The legacy library file changed during the upgrade')
+                  print('::notice title=UPGRADE_SMOKE::v0.4 to v0.5 installed in place, opened with a fresh library, and retained the synthetic legacy library file')
+              else:
+                  print('::warning title=UPGRADE_SMOKE::In-place update and fresh launch passed, but the emulator did not allow inspecting the legacy private file')
+          except Exception:
+              try: capture('upgrade-failure')
+              except Exception: pass
+              (OUT / 'upgrade-logcat.txt').write_bytes(adb('logcat', '-d', '-s', 'AndroidRuntime:E', check=False).stdout)
+              message = traceback.format_exc()[:3500].replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+              print('::error title=UPGRADE_SMOKE::' + message, flush=True)
+              raise
+          PY
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify the signed update in an emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          ANDROID_UI_OUTPUT: ${{ runner.temp }}/ft-upgrade-output
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: python3 "$RUNNER_TEMP/ft-upgrade.py"
+      - name: Save synthetic upgrade diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ft-upgrade-diagnostics
+          path: ${{ runner.temp }}/ft-upgrade-output/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  diagnostics:
+    if: always() && needs.upgrade.result == 'failure'
+    needs: upgrade
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-upgrade-diagnostics
+          path: ${{ runner.temp }}/diagnostics
+      - name: Make synthetic failure diagnostics reviewable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for item in "$RUNNER_TEMP"/diagnostics/*.png "$RUNNER_TEMP"/diagnostics/*.xml "$RUNNER_TEMP"/diagnostics/*.txt; do
+            [[ -f "$item" ]] || continue
+            name=$(basename "$item" | tr '[:lower:].-' '[:upper:]__')
+            python3 - "$item" > "$RUNNER_TEMP/blob.json" <<'PYCODE'
+          import base64, json, sys
+          with open(sys.argv[1], 'rb') as f:
+              json.dump({'content': base64.b64encode(f.read()).decode(), 'encoding': 'base64'}, sys.stdout)
+          PYCODE
+            sha=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/blobs" --input "$RUNNER_TEMP/blob.json" --jq .sha)
+            echo "::notice title=UPGRADE_$name::$sha"
+          done
+
+  stage_release:
+    needs: [sign, upgrade]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 7ebf239e5b3aa56163cd5952a9cb2488317e3f86
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-v0.5.0-signed
+          path: ${{ runner.temp }}/ft-signed
+      - name: Stage the approved v0.5 pre-release as a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'ft-sinan/FT-music-' && "$GITHUB_REF" == 'refs/heads/arena/3c1c13cb-ft-music' ]]
+          [[ -z "$(git ls-remote --tags origin refs/tags/v0.5.0)" ]] || { echo 'v0.5.0 tag already exists' >&2; exit 1; }
+          gh release create v0.5.0 "$RUNNER_TEMP/ft-signed/FT-Music-v0.5.0.apk" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --target 7ebf239e5b3aa56163cd5952a9cb2488317e3f86 \
+            --title 'FT Music v0.5.0' --notes-file .github/release-notes.md
