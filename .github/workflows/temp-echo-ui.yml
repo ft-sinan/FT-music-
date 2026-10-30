@@ -45,7 +45,7 @@ jobs:
           from pathlib import Path
           p = Path('android/tests/UiSmoke.py')
           s = p.read_text()
-          s = s.replace('welcome = wait_for("Continue")', 'welcome = wait_for("FT Music")\n        adb("shell", "input", "swipe", "540", "1550", "540", "400", "600")\n        time.sleep(2)')
+          s = s.replace('welcome = wait_for("Continue")', 'welcome = wait_for("FT Music")\n        adb("shell", "input", "swipe", "540", "1550", "540", "400", "600")\n        time.sleep(1)\n        adb("shell", "input", "swipe", "540", "1550", "540", "400", "600")\n        time.sleep(2)')
           p.write_text(s)
           PYCODE
       - name: Run FT Music emulator smoke
