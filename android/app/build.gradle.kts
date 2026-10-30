@@ -24,6 +24,7 @@ val copyBundledAssets by tasks.registering(Sync::class) {
 android {
     namespace = "com.ftmusic.app"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.ftmusic.app"
