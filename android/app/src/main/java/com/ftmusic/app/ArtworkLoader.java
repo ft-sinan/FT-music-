@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 final class ArtworkLoader {
+    interface Listener { void onArtwork(Bitmap bitmap); }
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService workers = Executors.newFixedThreadPool(3);
@@ -22,12 +23,13 @@ final class ArtworkLoader {
         @Override protected int sizeOf(String key, Bitmap bitmap) { return bitmap.getByteCount(); }
     };
     ArtworkLoader(Context context) { this.context = context.getApplicationContext(); }
-    void show(final ImageView view, final String path) {
+    void show(final ImageView view, final String path) { show(view, path, null); }
+    void show(final ImageView view, final String path, final Listener listener) {
         view.setTag(path);
         view.setImageDrawable(null);
         if (path == null || path.isEmpty()) return;
         Bitmap cached = cache.get(path);
-        if (cached != null) { view.setImageBitmap(cached); return; }
+        if (cached != null) { view.setImageBitmap(cached); if (listener != null) listener.onArtwork(cached); return; }
         workers.execute(new Runnable() {
             @Override public void run() {
                 Bitmap loaded = null;
@@ -51,7 +53,9 @@ final class ArtworkLoader {
                 final Bitmap result = loaded;
                 if (result != null) {
                     cache.put(path, result);
-                    main.post(new Runnable() { @Override public void run() { if (path.equals(view.getTag())) view.setImageBitmap(result); } });
+                    main.post(new Runnable() { @Override public void run() {
+                        if (path.equals(view.getTag())) { view.setImageBitmap(result); if (listener != null) listener.onArtwork(result); }
+                    } });
                 }
             }
         });

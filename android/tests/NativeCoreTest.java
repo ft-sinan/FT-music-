@@ -40,15 +40,71 @@ public final class NativeCoreTest {
         check(Song.fromJson(songs.get(0).toJson()).id.equals("yt:" + id), "persist remote song safely");
         check(Song.fromJson(new JSONObject().put("id", "yt:bad").put("title", "Bad").put("videoId", "bad")) == null, "reject tampered record");
 
+        // Home shelves may mix songs with albums/playlists. Never display a playlist as if its
+        // incidental menu video were the selected track, and never seed Home with demo songs.
+        String secondId = "abcDEF12345";
+        JSONObject directSong = new JSONObject()
+                .put("title", new JSONObject().put("runs", new JSONArray().put(new JSONObject().put("text", "Second song"))))
+                .put("subtitle", new JSONObject().put("simpleText", "Second artist"))
+                .put("navigationEndpoint", new JSONObject().put("watchEndpoint", new JSONObject().put("videoId", secondId)))
+                .put("thumbnail", new JSONObject().put("thumbnails", new JSONArray().put(new JSONObject().put("url", "https://evil.example/art"))));
+        JSONObject album = new JSONObject().put("title", new JSONObject().put("simpleText", "An album"))
+                .put("navigationEndpoint", new JSONObject().put("browseEndpoint", new JSONObject().put("browseId", "MPRE_album")))
+                .put("menu", new JSONObject().put("watchEndpoint", new JSONObject().put("videoId", secondId)));
+        JSONObject albumPage = new JSONObject().put("title", new JSONObject().put("simpleText", "Real album"))
+                .put("subtitle", new JSONObject().put("simpleText", "Album • Artist"))
+                .put("navigationEndpoint", new JSONObject().put("browseEndpoint", new JSONObject().put("browseId", "MPRE_album")
+                    .put("browseEndpointContextSupportedConfigs", new JSONObject().put("browseEndpointContextMusicConfig",
+                            new JSONObject().put("pageType", "MUSIC_PAGE_TYPE_ALBUM")))))
+                .put("menu", new JSONObject().put("watchEndpoint", new JSONObject().put("videoId", secondId)));
+        JSONObject notASong = new JSONObject().put("flexColumns", new JSONArray().put(columns).put(artist))
+                .put("menu", new JSONObject().put("watchEndpoint", new JSONObject().put("videoId", secondId)));
+        JSONObject homeShelf = new JSONObject().put("header", new JSONObject().put("musicCarouselShelfBasicHeaderRenderer",
+                    new JSONObject().put("title", new JSONObject().put("simpleText", "Quick picks"))))
+                .put("contents", new JSONArray().put(new JSONObject().put("musicTwoRowItemRenderer", album))
+                    .put(new JSONObject().put("musicTwoRowItemRenderer", albumPage))
+                    .put(new JSONObject().put("musicResponsiveListItemRenderer", notASong))
+                    .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))
+                    .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))
+                    .put(new JSONObject().put("musicTwoRowItemRenderer", directSong)));
+        List<YouTubeMusicClient.HomeSection> home = YouTubeMusicClient.parseHome(
+                new JSONObject().put("sections", new JSONArray().put(new JSONObject().put("musicCarouselShelfRenderer", homeShelf))));
+        check(home.size() == 1 && home.get(0).title.equals("Quick picks"), "read a labelled home shelf");
+        check(home.get(0).items.size() == 3 && home.get(0).items.get(0).song == null
+                && home.get(0).items.get(0).kind.equals("Album") && home.get(0).items.get(0).browseId.equals("MPRE_album"), "keep a real album as a browseable album, not a song");
+        check(home.get(0).songs.size() == 2 && home.get(0).songs.get(0).videoId.equals(id)
+                && home.get(0).songs.get(1).videoId.equals(secondId), "skip unknown collections, menu-only videos, and duplicate songs");
+        check(home.get(0).songs.get(1).artwork.equals("https://i.ytimg.com/vi/" + secondId + "/hqdefault.jpg"), "fall back from unsafe home artwork");
+        check(YouTubeMusicClient.parseHome(new JSONObject().put("musicCarouselShelfRenderer", new JSONObject().put("contents",
+                new JSONArray().put(new JSONObject().put("musicTwoRowItemRenderer", album))))).isEmpty(), "omit unsupported shelves");
+        List<Song> albumTracks = YouTubeMusicClient.parseBrowseTracks(new JSONObject().put("tracks", new JSONArray()
+                .put(new JSONObject().put("musicResponsiveListItemRenderer", notASong))
+                .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))
+                .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))));
+        check(albumTracks.size() == 1 && albumTracks.get(0).videoId.equals(id), "browse returns only primary playable tracks and removes duplicates");
+        try { new YouTubeMusicClient().browseTracks("../bad"); throw new AssertionError("invalid collection ID must fail"); }
+        catch (IOException expected) { check(expected.getMessage().contains("Invalid"), "reject invalid collection IDs before networking"); }
+        List<Song> recent = HomeFeed.recent(Arrays.asList(Catalog.SONGS.get(0), songs.get(0), Catalog.SONGS.get(1), songs.get(0)), 12);
+        check(recent.size() == 1 && recent.get(0).id.equals("yt:" + id), "home history excludes bundled samples and duplicates");
+        check(HomeFeed.recent(Arrays.asList(songs.get(0)), 0).isEmpty() && HomeFeed.recent(null, 3).isEmpty(), "home history handles empty inputs");
+
         JSONObject response = new JSONObject().put("streamingData", new JSONObject().put("adaptiveFormats", new JSONArray()
                 .put(new JSONObject().put("mimeType", "audio/mp4").put("bitrate", 96000).put("url", "https://r1.googlevideo.com/low"))
                 .put(new JSONObject().put("mimeType", "audio/mp4").put("bitrate", 128000).put("url", "https://r1.googlevideo.com/high"))
                 .put(new JSONObject().put("mimeType", "audio/mp4").put("bitrate", 999999).put("url", "https://evil.example/bad"))));
         check(YouTubeMusicClient.chooseAudio(response).endsWith("/high"), "select highest safe AAC stream");
+        check(YouTubeMusicClient.playbackFailure(new JSONObject().put("status", "LOGIN_REQUIRED")).contains("sign-in or verification"), "explain provider sign-in challenges without asking for a YouTube account");
+        check(YouTubeMusicClient.playbackFailure(new JSONObject().put("status", "UNPLAYABLE")).contains("anonymous playback"), "explain other provider playback failures");
         try { YouTubeMusicClient.chooseAudio(new JSONObject()); throw new AssertionError("missing audio must fail"); }
         catch (IOException expected) { check(expected.getMessage().contains("No compatible"), "missing stream error"); }
 
         PlayQueue queue = new PlayQueue();
+        check(queue.current() == null && queue.items().isEmpty() && queue.index() == -1, "a fresh queue has no preset sample song");
+        check(!queue.next() && !queue.previous() && !queue.select(0), "empty queue navigation is safe");
+        queue.shuffleUpcoming(); queue.add(null);
+        check(queue.current() == null, "empty queue tolerates shuffle and null additions");
+        queue.add(songs.get(0));
+        check(queue.current().id.equals("yt:" + id) && queue.index() == 0, "first explicit queued song is selectable");
         queue.replace(Arrays.asList(Catalog.SONGS.get(0), Catalog.SONGS.get(1), Catalog.SONGS.get(2)), 1);
         check(queue.current().id.equals("city-in-the-rearview"), "selected queue index");
         check(queue.previous() && queue.current().id.equals("blue-skies"), "previous");
@@ -57,6 +113,11 @@ public final class NativeCoreTest {
         check(queue.current().id.equals("blue-skies") && queue.items().size() == 3, "shuffle preserves current track");
         check(queue.select(2) && !queue.next(), "no next beyond end");
         check(!queue.select(9), "reject out-of-range queue index");
+        int[] redTint = ArtworkTint.fromPixels(new int[] {0xffff0000, 0xffff0000, 0x00ffffff});
+        check(((redTint[0] >>> 16) & 255) > ((redTint[0] >>> 8) & 255), "artwork colors retain their dominant hue");
+        int[] whiteTint = ArtworkTint.fromPixels(new int[] {0xffffffff});
+        check(((whiteTint[0] >>> 16) & 255) <= 106 && (whiteTint[1] & 255) < (whiteTint[0] & 255), "bright artwork still produces a dark readable gradient");
+        check(ArtworkTint.fromPixels(null).length == 2 && ArtworkTint.fromPixels(new int[] {0x00ffffff})[0] == 0xff5a405e, "empty or transparent art uses a safe fallback");
         List<LrcParser.Line> lrc = LrcParser.parse("[ar:Artist]\n[offset:-250]\n[00:03.1][00:01.25]Earlier\n[00:02.500]Second\n[00:99.00]Invalid\n[00:04.001]Last");
         check(lrc.size() == 4, "parse multi-timestamp and ignore metadata/invalid seconds");
         check(lrc.get(0).atMillis == 1000 && lrc.get(0).text.equals("Earlier"), "sort and apply LRC offset");
