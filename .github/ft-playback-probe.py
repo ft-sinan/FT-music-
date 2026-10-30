@@ -47,7 +47,7 @@ def run():
     tap("FT_Emulator_Tone")
     time.sleep(8)
     playing = sessions("playing")
-    if PACKAGE not in playing or not re.search(r"state\s*=\s*3\b", playing):
+    if PACKAGE not in playing or not re.search(r"state\s*=\s*(?:PLAYING\(3\)|3\b)", playing):
         raise AssertionError("The local track did not enter Android's PLAYING media-session state")
     notification = adb("shell", "dumpsys", "notification", "--noredact").stdout.decode("utf-8", "replace")
     (OUT / "notifications.txt").write_text(notification, encoding="utf-8")
@@ -57,12 +57,12 @@ def run():
     adb("shell", "input", "keyevent", "KEYCODE_MEDIA_PAUSE")
     time.sleep(3)
     paused = sessions("paused")
-    if PACKAGE not in paused or not re.search(r"state\s*=\s*2\b", paused):
+    if PACKAGE not in paused or not re.search(r"state\s*=\s*(?:PAUSED\(2\)|2\b)", paused):
         raise AssertionError("The system media-pause key did not pause the session")
     adb("shell", "input", "keyevent", "KEYCODE_MEDIA_PLAY")
     time.sleep(3)
     resumed = sessions("resumed")
-    if PACKAGE not in resumed or not re.search(r"state\s*=\s*3\b", resumed):
+    if PACKAGE not in resumed or not re.search(r"state\s*=\s*(?:PLAYING\(3\)|3\b)", resumed):
         raise AssertionError("The system media-play key did not resume the session")
     print("::notice title=FT_PHONE_MEDIA_PROBE::Local tone playback, media notification and system pause/play passed")
 

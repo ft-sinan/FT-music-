@@ -1,4 +1,4 @@
-# Temporary emulator check of the verified unsigned APK. Remove after review.
+# Temporary emulator and phone-controls check of the verified unsigned APK. Remove after review.
 name: Temporary FT Music emulator smoke
 on:
   push:
