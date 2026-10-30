@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$GITHUB_REPOSITORY" == "ft-sinan/FT-music-" ]] || { echo 'The updater is pinned to the FT Music repository.' >&2; exit 1; }
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName' > "$RUNNER_TEMP/ft-existing-tags.txt"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name' > "$RUNNER_TEMP/ft-existing-tags.txt"
           VERSION=$(python3 android/scripts/release-version.py --existing-tags "$RUNNER_TEMP/ft-existing-tags.txt")
           TAG="v$VERSION"
           git ls-remote --tags origin "refs/tags/$TAG" > "$RUNNER_TEMP/ft-existing-tag-ref.txt"
@@ -45,21 +45,15 @@ jobs:
       - name: Test and build an unsigned release
         working-directory: android
         run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
-      - name: Sign using the protected repository secret
+      - name: Unseal and sign with the protected signing key
         env:
-          SIGNING_BUNDLE: ${{ secrets.FT_MUSIC_SIGNING_BUNDLE }}
+          FT_MUSIC_KEY_PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
         run: |
           set -euo pipefail
-          if [[ -z "$SIGNING_BUNDLE" ]]; then echo 'Missing FT_MUSIC_SIGNING_BUNDLE Actions secret.' >&2; exit 1; fi
           umask 077
           KEY_DIR=$(mktemp -d "$RUNNER_TEMP/ft-signing.XXXXXXXX")
           trap 'rm -rf "$KEY_DIR"' EXIT
-          printf '%s' "$SIGNING_BUNDLE" | base64 --decode > "$KEY_DIR/bundle.tar.gz"
-          # Reject unexpected archive members before extracting a secret-provided archive.
-          tar -tzf "$KEY_DIR/bundle.tar.gz" | LC_ALL=C sort > "$KEY_DIR/members.txt"
-          printf 'temp-cert.der\ntemp-key.pk8\n' > "$KEY_DIR/expected.txt"
-          cmp "$KEY_DIR/expected.txt" "$KEY_DIR/members.txt"
-          tar -xzf "$KEY_DIR/bundle.tar.gz" --no-same-owner --no-same-permissions -C "$KEY_DIR"
+          android/scripts/unseal-signing.sh "$KEY_DIR"
           android/scripts/sign-release.sh "$KEY_DIR/temp-key.pk8" "$KEY_DIR/temp-cert.der" "$RUNNER_TEMP/ft-release"
       - name: Publish GitHub release
         env:
