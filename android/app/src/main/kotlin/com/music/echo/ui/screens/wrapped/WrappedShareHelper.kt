@@ -529,7 +529,7 @@ object WrappedShareHelper {
         )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
       }
-      val chooser = Intent.createChooser(intent, "Share Echo Wrapped").apply {
+      val chooser = Intent.createChooser(intent, "Share FT Wrapped").apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       }
       context.startActivity(chooser)

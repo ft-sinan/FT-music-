@@ -427,7 +427,7 @@ fun StatsScreen(
         IconButton(onClick = { navController.navigate("wrapped") }) {
           Icon(
             painter = painterResource(R.drawable.star),
-            contentDescription = "Echo Wrapped",
+            contentDescription = "FT Wrapped",
           )
         }
         IconButton(onClick = { showHistorySheet = true }) {

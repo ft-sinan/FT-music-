@@ -144,7 +144,7 @@ fun SettingDialoge(
               Material3SettingsItem(
                 title = {
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Echo Wrapped")
+                    Text("FT Wrapped")
                     Spacer(Modifier.width(8.dp))
                     Surface(
                       color = MaterialTheme.colorScheme.primaryContainer,

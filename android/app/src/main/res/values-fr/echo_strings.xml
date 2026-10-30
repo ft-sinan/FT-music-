@@ -599,11 +599,11 @@
     <string name="turntable_widget_description">Widget musical circulaire avec commandes de lecture et de j\'aime</string>
     <string name="widget_music_player">Echo Classique (4×1)</string>
     <string name="widget_turntable">Tourne-disque Echo Classique (2×2)</string>
-    <string name="widget_modern_name">Echo Moderne (4×2)</string>
+    <string name="widget_modern_name">FT Moderne (4×2)</string>
     <string name="widget_modern_desc">Lecteur élégant avec barre de progression, favoris et commandes de bibliothèque</string>
-    <string name="widget_device_name">Echo Stream (4×2)</string>
+    <string name="widget_device_name">FT Stream (4×2)</string>
     <string name="widget_device_desc">Carte moderne affichant l\'appareil de lecture actif et la sortie audio</string>
-    <string name="widget_square_name">Echo Compact (2×2)</string>
+    <string name="widget_square_name">FT Compact (2×2)</string>
     <string name="widget_square_desc">Lecteur carré minimaliste avec des commandes lumineuses et dynamiques</string>
     <string name="widget_showcase_name">Echo Vitrine (4×4)</string>
     <string name="widget_showcase_desc">Grande carte mettant en valeur la pochette d\'album avec un en-tête dédié</string>

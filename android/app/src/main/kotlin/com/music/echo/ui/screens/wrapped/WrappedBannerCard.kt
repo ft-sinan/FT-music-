@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.sp
 import echo.music.iad1tya.R
 
 /**
- * Clean, minimal, Pixel UI / Material You inspired banner card for Echo Wrapped.
+ * Clean, minimal, Pixel UI / Material You inspired banner card for FT Wrapped.
  * Adapts to Monet dynamic color and provides a dismissible cross button.
  */
 @Composable

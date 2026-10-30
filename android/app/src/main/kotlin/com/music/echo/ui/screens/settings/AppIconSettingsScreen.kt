@@ -124,7 +124,7 @@ fun AppIconSettingsScreen(
         ),
         AppIconOption(
           AppIconType.ECHO_CAT,
-          "Echo Cat",
+          "FT Cat",
           "A playful cat by Alarp_Svc",
           R.mipmap.echo_cat_icon
         ),

@@ -187,7 +187,7 @@ fun SettingsScreen(
         add(
           Material3SettingsItem(
             icon = painterResource(echo.music.iad1tya.R.drawable.ic_echo_wrapped),
-            title = { Text("Echo Wrapped") },
+            title = { Text("FT Wrapped") },
             description = { Text("Your year in sound & personal music recap") },
             onClick = { navController.navigate("wrapped") }
           )

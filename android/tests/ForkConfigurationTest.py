@@ -18,8 +18,14 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('applicationId = "com.ftmusic.app"', build)
         self.assertIn('versionCode = ftVersionCode', build)
         self.assertIn('versionName = ftVersionName', build)
+        self.assertTrue((MAIN / "res/drawable/ft_launcher.xml").is_file())
+        self.assertTrue((MAIN / "res/drawable/ic_launcher_nobg.xml").is_file())
         self.assertIn('GNU GENERAL PUBLIC LICENSE', (ROOT / "LICENSE").read_text())
         self.assertIn('c0de840532aadc36a84475b63291fbc6452a1668', (ROOT / "UPSTREAM.md").read_text())
+        about = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AboutScreen.kt").read_text()
+        self.assertIn("GPLv3 · Based on Echo Music", about)
+        self.assertIn("https://github.com/EchoMusicApp/Echo-Music", about)
+        self.assertIn("https://github.com/ft-sinan/FT-music-", about)
 
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())

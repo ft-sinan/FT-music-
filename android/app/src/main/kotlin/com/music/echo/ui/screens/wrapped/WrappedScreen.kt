@@ -2057,7 +2057,7 @@ private fun InsufficientDataView(
       Spacer(modifier = Modifier.height(12.dp))
 
       Text(
-        text = "You've played ${state.songsPlayed} songs so far. Listen to at least ${state.minSongsRequired} tracks to unlock your personalized Echo Wrapped story.",
+        text = "You've played ${state.songsPlayed} songs so far. Listen to at least ${state.minSongsRequired} tracks to unlock your personalized FT Wrapped story.",
         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
         color = Color.White.copy(alpha = 0.7f),
         textAlign = TextAlign.Center

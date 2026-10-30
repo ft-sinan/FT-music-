@@ -66,8 +66,10 @@ jobs:
           BADGING=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "${APK_FILES[0]}")
           VERSION=$(python3 android/scripts/release-version.py)
           CODE=$(python3 android/scripts/release-version.py --code-only)
-          [[ "$BADGING" == *"name='com.ftmusic.app'"* && "$BADGING" == *"versionCode='$CODE'"* && "$BADGING" == *"versionName='$VERSION'"* ]]
-          echo "Verified com.ftmusic.app $VERSION ($CODE)"
+          [[ "$BADGING" == *"name='com.ftmusic.app'"* && "$BADGING" == *"versionCode='$CODE'"* && "$BADGING" == *"versionName='$VERSION'"* && "$BADGING" == *"application-label:'FT Music'"* ]]
+          MANIFEST=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "${APK_FILES[0]}" AndroidManifest.xml)
+          [[ "$MANIFEST" != *"com.google.android.gms.car.application"* && "$MANIFEST" != *"android.media.browse.MediaBrowserService"* ]] || { echo 'Android Auto integration unexpectedly present.' >&2; exit 1; }
+          echo "Verified com.ftmusic.app $VERSION ($CODE), FT branding, and no Android Auto discovery"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ft-music-unsigned-apk

@@ -137,7 +137,7 @@ constructor(
       }
     }
 
-    // 1. Echo Modern Flow (4x2)
+    // 1. FT Modern Flow (4x2)
     val modernComponent = ComponentName(context, EchoModernWidgetReceiver::class.java)
     val modernWidgetIds = appWidgetManager.getAppWidgetIds(modernComponent)
     if (modernWidgetIds.isNotEmpty()) {
@@ -157,7 +157,7 @@ constructor(
       }
     }
 
-    // 3. Echo Compact Glow (2x2)
+    // 3. FT Compact Glow (2x2)
     val squareComponent = ComponentName(context, EchoSquareWidgetReceiver::class.java)
     val squareWidgetIds = appWidgetManager.getAppWidgetIds(squareComponent)
     if (squareWidgetIds.isNotEmpty()) {
@@ -174,7 +174,7 @@ constructor(
       }
     }
 
-    // 4. Echo Showcase Card (4x4)
+    // 4. FT Showcase Card (4x4)
     val showcaseComponent = ComponentName(context, EchoShowcaseWidgetReceiver::class.java)
     val showcaseWidgetIds = appWidgetManager.getAppWidgetIds(showcaseComponent)
     if (showcaseWidgetIds.isNotEmpty()) {
@@ -221,7 +221,7 @@ constructor(
     val vinylDisc = createVinylDiscBitmap(cachedAlbumArt, vinylAngle, 320, false)
     val vintageVinylDisc = createVinylDiscBitmap(cachedAlbumArt, vinylAngle, 260, true)
 
-    // 6. Echo Vinyl Square (2x2 / 3x3)
+    // 6. FT Vinyl Square (2x2 / 3x3)
     val vinylComponent = ComponentName(context, EchoVinylWidgetReceiver::class.java)
     val vinylWidgetIds = appWidgetManager.getAppWidgetIds(vinylComponent)
     if (vinylWidgetIds.isNotEmpty()) {
@@ -241,7 +241,7 @@ constructor(
       }
     }
 
-    // 8. Echo Vintage Turntable (4x2)
+    // 8. FT Vintage Turntable (4x2)
     val vintageComponent = ComponentName(context, EchoVintageWidgetReceiver::class.java)
     val vintageWidgetIds = appWidgetManager.getAppWidgetIds(vintageComponent)
     if (vintageWidgetIds.isNotEmpty()) {
@@ -260,7 +260,7 @@ constructor(
       }
     }
 
-    // 9. Echo Adaptive Player (2-in-1 Compact to Expanded Queue)
+    // 9. FT Adaptive Player (2-in-1 Compact to Expanded Queue)
     val adaptiveComponent = ComponentName(context, EchoAdaptiveWidgetReceiver::class.java)
     val adaptiveWidgetIds = appWidgetManager.getAppWidgetIds(adaptiveComponent)
     if (adaptiveWidgetIds.isNotEmpty()) {

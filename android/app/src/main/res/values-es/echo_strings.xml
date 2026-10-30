@@ -549,7 +549,7 @@
     <string name="eq_preset_dirac_game">Dirac Game</string>
     <string name="eq_enable_title">Ecualizador</string>
     <string name="eq_enable_summary">Activar procesamiento de audio profesional</string>
-    <string name="eq_label_echo">Echo Signature</string>
+    <string name="eq_label_echo">FT Signature</string>
     <string name="eq_label_dolby">Dolby Atmos</string>
     <string name="eq_label_dirac">Dirac Audio</string>
     <string name="eq_reset">Restablecer</string>
@@ -596,25 +596,25 @@
     <string name="widget_description">Widget del reproductor de música con controles de reproducción</string>
     <string name="queue_widget_description">Reproductor de música con vista previa de la cola</string>
     <string name="turntable_widget_description">Widget circular de música con controles de reproducción y Me gusta</string>
-    <string name="widget_music_player">Echo Classic (4×1)</string>
-    <string name="widget_turntable">Echo Classic Turntable (2×2)</string>
-    <string name="widget_modern_name">Echo Modern (4×2)</string>
+    <string name="widget_music_player">FT Classic (4×1)</string>
+    <string name="widget_turntable">FT Classic Turntable (2×2)</string>
+    <string name="widget_modern_name">FT Modern (4×2)</string>
     <string name="widget_modern_desc">Reproductor elegante con barra de progreso, favoritos y controles de biblioteca</string>
-    <string name="widget_device_name">Echo Stream (4×2)</string>
+    <string name="widget_device_name">FT Stream (4×2)</string>
     <string name="widget_device_desc">Tarjeta moderna que muestra el dispositivo activo y la salida de audio</string>
-    <string name="widget_square_name">Echo Compact (2×2)</string>
+    <string name="widget_square_name">FT Compact (2×2)</string>
     <string name="widget_square_desc">Reproductor cuadrado minimalista con controles brillantes</string>
-    <string name="widget_showcase_name">Echo Showcase (4×4)</string>
+    <string name="widget_showcase_name">FT Showcase (4×4)</string>
     <string name="widget_showcase_desc">Tarjeta ampliada con portada completa y encabezado de la app</string>
-    <string name="widget_slim_name">Echo Pill (4×1)</string>
+    <string name="widget_slim_name">FT Pill (4×1)</string>
     <string name="widget_slim_desc">Barra horizontal ultracompacta con progreso de reproducción en vivo</string>
-    <string name="widget_vinyl_name">Echo Vinyl Disc (Square)</string>
+    <string name="widget_vinyl_name">FT Vinyl Disc (Square)</string>
     <string name="widget_vinyl_desc">Tocadiscos de vinilo giratorio realista con brazo y cristal oscuro esmerilado</string>
-    <string name="widget_aurora_name">Echo Aurora Studio (4×2)</string>
+    <string name="widget_aurora_name">FT Aurora Studio (4×2)</string>
     <string name="widget_aurora_desc">Tarjeta translúcida Aurora con letras sincronizadas, selector de dispositivo y controles brillantes</string>
-    <string name="widget_vintage_name">Echo Vintage Turntable (4×2)</string>
+    <string name="widget_vintage_name">FT Vintage Turntable (4×2)</string>
     <string name="widget_vintage_desc">Tocadiscos retro cálido con disco de vinilo giratorio y detalles en tono chocolate</string>
-    <string name="widget_adaptive_name">Echo Adaptive Player</string>
+    <string name="widget_adaptive_name">FT Adaptive Player</string>
     <string name="widget_adaptive_desc">Reproductor adaptable 2 en 1 que se expande para mostrar la cola de próximas canciones</string>
     <string name="widget_queue_empty">No hay próximas canciones</string>
 
@@ -1054,7 +1054,7 @@
     <string name="local_songs_empty_desc">Abre los ajustes desde la barra superior y escanea el dispositivo para buscar audio sin conexión.</string>
     <string name="local_songs_no_matches_desc">Prueba con otro nombre de canción, artista o álbum.</string>
     <!-- Music Recognizer Widget strings -->
-    <string name="widget_recognizer_name">Echo Recognizer (1×1)</string>
+    <string name="widget_recognizer_name">FT Recognizer (1×1)</string>
     <string name="widget_recognizer_description">Identifica canciones que estén sonando a tu alrededor directamente desde tu pantalla de inicio</string>
     <string name="widget_recognizer_tap_to_search">Toca para identificar una canción</string>
     <string name="widget_recognizer_listening">Escuchando…</string>
@@ -1068,7 +1068,7 @@
     <string name="widget_recognizer_channel_name">Reconocimiento de música</string>
     <string name="widget_recognizer_channel_desc">Muestra una notificación mientras se identifica una canción desde el widget</string>
     <string name="widget_recognizer_notification_text">Grabando audio para identificar la canción…</string>
-    <string name="widget_playlists">Echo Playlists (4×2)</string>
+    <string name="widget_playlists">FT Playlists (4×2)</string>
     <string name="widget_playlists_description">Accesos directos a listas con controles de minirreproductor</string>
 
     <string name="choose_something_below">Elige una opción abajo</string>

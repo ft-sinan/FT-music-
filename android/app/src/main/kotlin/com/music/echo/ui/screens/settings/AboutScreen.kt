@@ -25,10 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -139,6 +136,26 @@ fun AboutScreen(
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
       item { AboutAppCard() }
+
+      item {
+        Material3SettingsGroup(
+          title = "Source and license",
+          items = listOf(
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.github),
+              title = { Text("FT Music source") },
+              description = { Text("GPLv3 · Based on Echo Music by Aditya and contributors") },
+              onClick = { uriHandler.openUri("https://github.com/ft-sinan/FT-music-") }
+            ),
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.github),
+              title = { Text("Original Echo Music project") },
+              description = { Text("Upstream source and contributors") },
+              onClick = { uriHandler.openUri("https://github.com/EchoMusicApp/Echo-Music") }
+            )
+          )
+        )
+      }
 
       if (contributors.isNotEmpty()) {
         item {
@@ -273,8 +290,6 @@ private fun AboutAppCard() {
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     var isEasterEggActive by remember { mutableStateOf(false) }
     val rotation by
       animateFloatAsState(
@@ -316,9 +331,8 @@ private fun AboutAppCard() {
     ) {
       if (rotation <= 90f) {
         Image(
-          painter = painterResource(R.drawable.ic_launcher_nobg),
+          painter = painterResource(R.drawable.ft_launcher),
           contentDescription = null,
-          colorFilter = ColorFilter.tint(if (isDark) Color.White else Color(0xFFEA3829)),
           modifier = Modifier.fillMaxSize()
         )
       } else {
