@@ -59,7 +59,7 @@ cd android
 ./gradlew testUniversalGmsDebugUnitTest assembleUniversalGmsDebug
 ```
 
-The universal GMS variant retains Echo's optional Google Cast support; `assembleUniversalFossDebug` is the upstream FOSS variant. A debug APK has a different package suffix and signing key and is **not** an in-place update. `assembleUniversalGmsRelease` generates an unsigned release; [`android/RELEASING.md`](android/RELEASING.md) describes the protected signing key and release process. The new fork has not yet been verified on a physical phone.
+The universal GMS variant retains Echo's optional Google Cast support; `assembleUniversalFossDebug` is the upstream FOSS variant. A debug APK has a different package suffix and signing key and is **not** an in-place update. `assembleUniversalGmsRelease` generates an unsigned release; [`android/RELEASING.md`](android/RELEASING.md) describes the protected signing key and release process. Emulator checks covered launch, the Google sign-in page, local playback and system media controls, plus a signed in-place upgrade from v0.4 with a synthetic legacy library. The new fork has not yet been verified on a physical phone.
 
 The app's **Settings → Updates** opens [FT Music releases](https://github.com/ft-sinan/FT-music-/releases) manually, not Echo's APK site. Published in-place updates must use the same application ID (`com.ftmusic.app`), signing certificate and a higher version code. The selected fresh-library behavior still applies. Android asks the user to confirm installation.
 
