@@ -24,17 +24,25 @@ def adb(*args, check=True):
 
 
 def dump():
-    adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml")
+    # The first dump after launch can fail while the emulator is still settling. Remove the
+    # previous file so a failed dump cannot accidentally return stale screen contents.
+    adb("shell", "rm", "-f", "/sdcard/ft-window.xml", check=False)
+    result = adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml")
+    if b"ERROR" in result.stdout:
+        raise RuntimeError(result.stdout.decode("utf-8", "replace"))
     return adb("shell", "cat", "/sdcard/ft-window.xml").stdout.decode("utf-8", "replace")
 
 
-def wait_for(needle, timeout=25):
+def wait_for(needle, timeout=60):
     deadline = time.monotonic() + timeout
     last = ""
     while time.monotonic() < deadline:
-        last = dump()
-        if needle in last:
-            return last
+        try:
+            last = dump()
+            if needle in last:
+                return last
+        except (subprocess.CalledProcessError, RuntimeError) as error:
+            last = str(error)
         time.sleep(0.5)
     raise AssertionError(f"Could not find {needle!r} on screen. UI: {last[:8000]}")
 
