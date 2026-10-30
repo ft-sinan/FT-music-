@@ -1,0 +1,78 @@
+# One-time transfer of the existing trial signing key into an encrypted backup.
+# The key is encrypted to a temporary certificate before it leaves the sandbox;
+# the runner then seals it with a passphrase set privately by the repository owner.
+name: Bootstrap FT Music signing key
+
+on:
+  push:
+    branches: [arena/f3e1b3c5-ft-music]
+    paths: [.github/workflows/signing-bootstrap.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  seal:
+    if: github.repository == 'ft-sinan/FT-music-'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v0.3.0
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Validate signing passphrase
+        env:
+          PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          [[ ${#PASSPHRASE} -ge 40 && ${#PASSPHRASE} -le 512 && "$PASSPHRASE" != *$'\n'* ]] || {
+            echo '::error::The FT_MUSIC_KEY_PASSPHRASE secret must be a random, single-line value of 40–512 characters.'
+            exit 1
+          }
+      - name: Publish one-time transfer certificate
+        run: |
+          set -euo pipefail
+          umask 077
+          KEY_DIR="$RUNNER_TEMP/ft-signing-transfer"
+          mkdir -m 700 "$KEY_DIR"
+          openssl req -x509 -newkey rsa:3072 -nodes -keyout "$KEY_DIR/transfer-key.pem" \
+            -out "$KEY_DIR/transfer-cert.pem" -days 1 -subj '/CN=FT Music one-time transfer' >/dev/null 2>&1
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$KEY_DIR/transfer-cert.pem"
+      - name: Wait for encrypted signing-key transfer
+        run: |
+          set -euo pipefail
+          KEY_DIR="$RUNNER_TEMP/ft-signing-transfer"
+          received=false
+          for attempt in $(seq 1 120); do
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$KEY_DIR/message.txt"
+            if [[ "$(head -n 1 "$KEY_DIR/message.txt")" == 'FT_MUSIC_TRANSFER_V1' ]]; then
+              tail -n +2 "$KEY_DIR/message.txt" | base64 --decode > "$KEY_DIR/transfer.cms"
+              received=true
+              break
+            fi
+            sleep 5
+          done
+          [[ "$received" == true ]] || { echo '::error::No encrypted transfer arrived before timeout.'; exit 1; }
+          openssl cms -decrypt -binary -inform DER -in "$KEY_DIR/transfer.cms" \
+            -recip "$KEY_DIR/transfer-cert.pem" -inkey "$KEY_DIR/transfer-key.pem" -out "$KEY_DIR/signing-bundle.tar.gz"
+          tar -tzf "$KEY_DIR/signing-bundle.tar.gz" | LC_ALL=C sort > "$KEY_DIR/members.txt"
+          printf 'temp-cert.der\ntemp-key.pk8\n' > "$KEY_DIR/expected.txt"
+          cmp "$KEY_DIR/expected.txt" "$KEY_DIR/members.txt"
+          tar -xzf "$KEY_DIR/signing-bundle.tar.gz" --no-same-owner --no-same-permissions -C "$KEY_DIR"
+          ACTUAL=$(openssl x509 -inform DER -in "$KEY_DIR/temp-cert.der" -noout -fingerprint -sha256 | sed 's/^.*=//;s/://g' | tr '[:upper:]' '[:lower:]')
+          EXPECTED=$(tr -d '[:space:]' < android/signing-cert-sha256.txt)
+          [[ "$ACTUAL" == "$EXPECTED" ]] || { echo '::error::The transferred certificate does not match the trial app.'; exit 1; }
+      - name: Encrypt backup with the owner's secret
+        env:
+          PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          KEY_DIR="$RUNNER_TEMP/ft-signing-transfer"
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 --symmetric \
+            --cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA256 --s2k-count 65011712 \
+            --compress-algo none --output "$KEY_DIR/signing-bundle.gpg" "$KEY_DIR/signing-bundle.tar.gz" 3<<<"$PASSPHRASE"
+          { printf 'FT_MUSIC_SEALED_SIGNING_V1\n'; base64 -w 0 "$KEY_DIR/signing-bundle.gpg"; printf '\n'; } > "$KEY_DIR/sealed-note.txt"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$KEY_DIR/sealed-note.txt"
+          rm -rf "$KEY_DIR"
