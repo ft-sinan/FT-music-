@@ -12,7 +12,14 @@ OUTPUT=$3
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}
 TOOLS="${SDK}/build-tools/35.0.0"
-UNSIGNED="$ROOT/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+# CI may provide a separately built artifact, otherwise use the universal GMS output.
+if [[ -n "${FT_UNSIGNED_APK:-}" ]]; then
+  UNSIGNED="$FT_UNSIGNED_APK"
+else
+  mapfile -t CANDIDATES < <(find "$ROOT/android/app/build/outputs/apk/universalGms/release" -maxdepth 1 -name '*-unsigned.apk' -type f 2>/dev/null)
+  [[ ${#CANDIDATES[@]} == 1 ]] || { echo "Expected exactly one unsigned universal GMS APK." >&2; exit 1; }
+  UNSIGNED="${CANDIDATES[0]}"
+fi
 [[ -n "$SDK" && -x "$TOOLS/zipalign" && -x "$TOOLS/apksigner" && -x "$TOOLS/aapt" ]] || { echo "Android build-tools 35.0.0 is required." >&2; exit 1; }
 [[ -f "$UNSIGNED" && -f "$KEY" && -f "$CERT" ]] || { echo "Unsigned APK, private key or certificate is missing." >&2; exit 1; }
 VERSION=$(python3 "$ROOT/android/scripts/release-version.py")
