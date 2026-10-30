@@ -114,10 +114,16 @@ def main():
             raise AssertionError("Bundled sample must not be promoted in Home recents")
         tap("Open now playing")
         wait_for("Close now playing")
+        wait_for("View queue")
+        wait_for("View lyrics")
         screenshot("player")
+        tap("View lyrics", attribute="text")
+        wait_for("Import LRC")
+        tap("‹  Close", attribute="text")
+        wait_for("Close now playing")
         if not adb("shell", "pidof", PACKAGE, check=False).stdout.strip():
             raise AssertionError("FT Music process is not running")
-        print("Android UI smoke: Home, Explore, Search, Library, empty queue and explicit playback passed")
+        print("Android UI smoke: Home, Explore, Search, Library, empty queue, playback, queue controls and lyrics passed")
         print("Screenshots:", OUTPUT)
     except Exception:
         try:

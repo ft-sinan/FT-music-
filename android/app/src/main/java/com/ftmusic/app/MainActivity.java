@@ -963,49 +963,49 @@ public final class MainActivity extends Activity implements PlaybackService.List
             }
         });
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); playerRoot.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout body = column(); padding(body, 24, 18, 24, 25); scroll.addView(body);
+        LinearLayout body = column(); padding(body, 24, 12, 24, 16); scroll.addView(body);
         LinearLayout top = row();
         top.addView(iconButton("down", "Close now playing", WHITE, Color.argb(35,255,255,255), 42, new Runnable() { @Override public void run() { if (playerDialog != null) playerDialog.dismiss(); } }), new LinearLayout.LayoutParams(dp(42), dp(42)));
         playerSource = text("NOW PLAYING", 10, Color.rgb(233,224,238), true); playerSource.setGravity(Gravity.CENTER); playerSource.setLetterSpacing(.12f); top.addView(playerSource, new LinearLayout.LayoutParams(0, -2, 1));
         top.addView(iconButton("more", "Song options", WHITE, Color.argb(35,255,255,255), 42, new Runnable() { @Override public void run() { if (playback != null) songOptions(playback.current(), false); } }), new LinearLayout.LayoutParams(dp(42), dp(42)));
-        body.addView(top); addGap(body, 25);
+        body.addView(top); addGap(body, 12);
         int width = getResources().getDisplayMetrics().widthPixels - dp(48);
         int height = getResources().getDisplayMetrics().heightPixels;
-        int artSize = Math.max(dp(200), Math.min(Math.min(width, dp(430)), (int) (height * .43f)));
+        int artSize = Math.max(dp(180), Math.min(Math.min(width, dp(320)), (int) (height * .34f)));
         playerCover = cover(playback.current().artwork, 20); LinearLayout.LayoutParams coverParams = new LinearLayout.LayoutParams(artSize, artSize); coverParams.gravity = Gravity.CENTER_HORIZONTAL; body.addView(playerCover, coverParams);
-        addGap(body, 27);
-        LinearLayout titleRow = row(); LinearLayout details = column(); playerTitle = text("", 26, WHITE, false); playerTitle.setLetterSpacing(-.025f); playerTitle.setMaxLines(2);
+        addGap(body, 18);
+        LinearLayout titleRow = row(); LinearLayout details = column(); playerTitle = text("", 24, WHITE, false); playerTitle.setLetterSpacing(-.025f); playerTitle.setMaxLines(2);
         playerArtist = text("", 14, Color.rgb(226,216,228), false); padding(playerArtist, 0, 5, 0, 0); details.addView(playerTitle); details.addView(playerArtist); titleRow.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
         FrameLayout heart = iconButton("heart", "Like current song", WHITE, Color.argb(35,255,255,255), 46, new Runnable() { @Override public void run() { if (playback != null) { library.toggleLike(playback.current()); updatePlayer(); } } });
         playerHeart = (IconView) heart.getChildAt(0); titleRow.addView(heart, new LinearLayout.LayoutParams(dp(46), dp(46))); body.addView(titleRow);
-        addGap(body, 22);
+        addGap(body, 12);
         seekBar = new SeekBar(this); seekBar.setMax(1000); seekBar.setProgressTintList(ColorStateList.valueOf(Color.rgb(244, 171, 154)));
-        seekBar.setThumbTintList(ColorStateList.valueOf(WHITE)); seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(70,255,255,255))); seekBar.setContentDescription("Playback position"); body.addView(seekBar, new LinearLayout.LayoutParams(-1, dp(26)));
+        seekBar.setThumbTintList(ColorStateList.valueOf(WHITE)); seekBar.setProgressBackgroundTintList(ColorStateList.valueOf(Color.argb(70,255,255,255))); seekBar.setContentDescription("Playback position"); body.addView(seekBar, new LinearLayout.LayoutParams(-1, dp(22)));
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) { if (fromUser && playback != null && playerTime != null) playerTime.setText(formatTime((long) playback.duration() * progress / 1000)); }
             @Override public void onStartTrackingTouch(SeekBar bar) { seeking = true; }
             @Override public void onStopTrackingTouch(SeekBar bar) { if (playback != null) playback.seek((int) ((long) playback.duration() * bar.getProgress() / 1000)); seeking = false; }
         });
         LinearLayout times = row(); playerTime = text("0:00", 11, Color.rgb(227,218,228), false); playerDuration = text("0:00", 11, Color.rgb(227,218,228), false); times.addView(playerTime, new LinearLayout.LayoutParams(0, -2, 1)); times.addView(playerDuration); body.addView(times);
-        addGap(body, 20);
+        addGap(body, 12);
         LinearLayout controls = row(); controls.setGravity(Gravity.CENTER);
-        FrameLayout previous = iconButton("previous", "Previous track", WHITE, Color.TRANSPARENT, 54, new Runnable() { @Override public void run() { if (playback != null) playback.previous(); } });
-        controls.addView(previous, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        FrameLayout previous = iconButton("previous", "Previous track", WHITE, Color.TRANSPARENT, 50, new Runnable() { @Override public void run() { if (playback != null) playback.previous(); } });
+        controls.addView(previous, new LinearLayout.LayoutParams(dp(50), dp(50)));
         View left = new View(this); controls.addView(left, new LinearLayout.LayoutParams(0, 1, 1));
-        FrameLayout play = iconButton("play", "Play", DARK, WHITE, 72, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
-        playerPlay = (IconView) play.getChildAt(0); FrameLayout.LayoutParams playGlyph = (FrameLayout.LayoutParams) playerPlay.getLayoutParams(); playGlyph.width = dp(30); playGlyph.height = dp(30); playerPlay.setLayoutParams(playGlyph); controls.addView(play, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        FrameLayout play = iconButton("play", "Play", DARK, WHITE, 66, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
+        playerPlay = (IconView) play.getChildAt(0); FrameLayout.LayoutParams playGlyph = (FrameLayout.LayoutParams) playerPlay.getLayoutParams(); playGlyph.width = dp(30); playGlyph.height = dp(30); playerPlay.setLayoutParams(playGlyph); controls.addView(play, new LinearLayout.LayoutParams(dp(66), dp(66)));
         View right = new View(this); controls.addView(right, new LinearLayout.LayoutParams(0, 1, 1));
-        controls.addView(iconButton("next", "Next track", WHITE, Color.TRANSPARENT, 54, new Runnable() { @Override public void run() { if (playback != null) playback.next(); } }), new LinearLayout.LayoutParams(dp(54), dp(54))); body.addView(controls);
-        addGap(body, 28);
+        controls.addView(iconButton("next", "Next track", WHITE, Color.TRANSPARENT, 50, new Runnable() { @Override public void run() { if (playback != null) playback.next(); } }), new LinearLayout.LayoutParams(dp(50), dp(50))); body.addView(controls);
+        addGap(body, 14);
         LinearLayout footer = row(); footer.setGravity(Gravity.CENTER);
         footer.addView(iconButton("shuffle", "Shuffle upcoming tracks", WHITE, Color.argb(45,255,255,255), 42, new Runnable() { @Override public void run() { if (playback != null) { playback.shuffleUpcoming(); toast("Upcoming tracks shuffled"); } } }), new LinearLayout.LayoutParams(dp(42), dp(42)));
         repeatButton = iconButton("repeat", "Repeat off", WHITE, Color.argb(45,255,255,255), 42, new Runnable() { @Override public void run() { if (playback != null) { playback.cycleRepeat(); toast(playback.repeatMode() == 0 ? "Repeat off" : playback.repeatMode() == 1 ? "Repeat all" : "Repeat one"); } } });
         LinearLayout.LayoutParams repeatParams = new LinearLayout.LayoutParams(dp(42), dp(42)); repeatParams.setMargins(dp(8), 0, dp(8), 0); footer.addView(repeatButton, repeatParams);
         footer.addView(pill("View queue", WHITE, Color.argb(45,255,255,255), new Runnable() { @Override public void run() { if (playerDialog != null) playerDialog.dismiss(); showTab("queue"); } })); body.addView(footer);
-        addGap(body, 12);
+        addGap(body, 8);
         TextView lyrics = pill("View lyrics", WHITE, Color.argb(45,255,255,255), new Runnable() { @Override public void run() { openLyrics(); } });
         LinearLayout.LayoutParams lyricsParams = new LinearLayout.LayoutParams(-2, -2); lyricsParams.gravity = Gravity.CENTER_HORIZONTAL; body.addView(lyrics, lyricsParams);
-        addGap(body, 9);
+        addGap(body, 6);
         playerOpenYouTube = pill("Open in YouTube Music ↗", WHITE, Color.argb(45,255,255,255), new Runnable() { @Override public void run() { if (playback != null) openYouTube(playback.current()); } });
         LinearLayout.LayoutParams ytParams = new LinearLayout.LayoutParams(-2, -2); ytParams.gravity = Gravity.CENTER_HORIZONTAL; body.addView(playerOpenYouTube, ytParams);
         displayedPlayerId = "";

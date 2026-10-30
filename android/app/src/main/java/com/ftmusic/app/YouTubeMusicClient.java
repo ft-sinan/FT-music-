@@ -421,13 +421,18 @@ final class YouTubeMusicClient {
             if (visitor.isEmpty()) throw new IOException("YouTube Music didn't provide a playback session.");
             JSONObject response = visionRequest("player", new JSONObject().put("videoId", videoId).put("contentCheckOk", true).put("racyCheckOk", true), visitor);
             JSONObject status = response.optJSONObject("playabilityStatus");
-            if (status != null && !"OK".equals(status.optString("status", ""))) {
-                throw new IOException("This track isn't available for anonymous playback. Open it in YouTube Music instead.");
-            }
+            if (status != null && !"OK".equals(status.optString("status", ""))) throw new IOException(playbackFailure(status));
             return chooseAudio(response);
         } catch (JSONException error) {
             throw new IOException("YouTube Music returned an unexpected playback response.", error);
         }
+    }
+
+    static String playbackFailure(JSONObject status) {
+        if (status != null && "LOGIN_REQUIRED".equals(status.optString("status", ""))) {
+            return "YouTube requires a sign-in or verification for this track or connection. FT Music doesn't use a YouTube account; open the track in YouTube Music instead.";
+        }
+        return "This track isn't available for anonymous playback. Open it in YouTube Music instead.";
     }
 
     static String chooseAudio(JSONObject response) throws IOException {

@@ -93,6 +93,8 @@ public final class NativeCoreTest {
                 .put(new JSONObject().put("mimeType", "audio/mp4").put("bitrate", 128000).put("url", "https://r1.googlevideo.com/high"))
                 .put(new JSONObject().put("mimeType", "audio/mp4").put("bitrate", 999999).put("url", "https://evil.example/bad"))));
         check(YouTubeMusicClient.chooseAudio(response).endsWith("/high"), "select highest safe AAC stream");
+        check(YouTubeMusicClient.playbackFailure(new JSONObject().put("status", "LOGIN_REQUIRED")).contains("sign-in or verification"), "explain provider sign-in challenges without asking for a YouTube account");
+        check(YouTubeMusicClient.playbackFailure(new JSONObject().put("status", "UNPLAYABLE")).contains("anonymous playback"), "explain other provider playback failures");
         try { YouTubeMusicClient.chooseAudio(new JSONObject()); throw new AssertionError("missing audio must fail"); }
         catch (IOException expected) { check(expected.getMessage().contains("No compatible"), "missing stream error"); }
 
