@@ -39,23 +39,28 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** A native, phone-first listening experience, independent of the web implementation. */
 public final class MainActivity extends Activity implements PlaybackService.Listener, OfflineDownloads.Listener {
-    private static final int BG = Color.rgb(246, 244, 240);
-    private static final int INK = Color.rgb(35, 33, 44);
-    private static final int MUTED = Color.rgb(116, 113, 125);
+    private static final int BG = Color.rgb(24, 17, 33);
+    private static final int INK = Color.rgb(250, 246, 250);
+    private static final int MUTED = Color.rgb(195, 183, 200);
     private static final int WHITE = Color.WHITE;
-    private static final int LINE = Color.rgb(230, 226, 232);
+    private static final int DARK = Color.rgb(35, 24, 40);
+    private static final int ACCENT = Color.rgb(246, 181, 205);
+    private static final int GLASS = Color.argb(112, 20, 14, 29);
+    private static final int GLASS_STRONG = Color.argb(190, 19, 15, 33);
+    private static final int LINE = Color.argb(62, 255, 255, 255);
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService searchWorker = Executors.newSingleThreadExecutor();
+    private final ExecutorService homeWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService syncWorker = Executors.newSingleThreadExecutor();
     private final ExecutorService updateWorker = Executors.newSingleThreadExecutor();
     private boolean checkingUpdates;
@@ -78,6 +83,19 @@ public final class MainActivity extends Activity implements PlaybackService.List
     private boolean searchedOnline;
     private int searchGeneration;
     private List<Song> onlineResults = new ArrayList<Song>();
+    private List<YouTubeMusicClient.HomeSection> homeSections = new ArrayList<YouTubeMusicClient.HomeSection>();
+    private boolean homeLoading;
+    private String homeError = "";
+    private int homeGeneration;
+    private int browseGeneration;
+    private YouTubeMusicClient.HomeItem openCollection;
+    private List<Song> collectionSongs = new ArrayList<Song>();
+    private boolean collectionLoading;
+    private String collectionError = "";
+    private String lastRecentSong = "";
+    private String miniSongId = "";
+    private LinearLayout homeRecentContainer, homeDiscoveryContainer;
+    private View miniContainer;
     private FrameLayout pageFrame;
     private LinearLayout appRoot;
     private LinearLayout nav;
@@ -112,13 +130,15 @@ public final class MainActivity extends Activity implements PlaybackService.List
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(0);
         library = new LibraryStore(this);
         downloads = OfflineDownloads.get(this);
         artwork = new ArtworkLoader(this);
         if (state != null) { tab = state.getString("tab", "home"); librarySection = state.getString("library", "liked"); searchQuery = state.getString("query", ""); pendingLyricsSongId = state.getString("lyricsImport", ""); }
+        if (tab.equals("browse")) tab = "home"; // Remote collection state is intentionally not persisted.
         buildShell();
         renderPage();
+        loadDiscovery();
     }
     @Override protected void onStart() {
         super.onStart();
@@ -134,7 +154,10 @@ public final class MainActivity extends Activity implements PlaybackService.List
     }
     @Override protected void onDestroy() {
         searchGeneration++;
+        homeGeneration++;
+        browseGeneration++;
         searchWorker.shutdownNow();
+        homeWorker.shutdownNow();
         syncWorker.shutdownNow();
         updateWorker.shutdownNow();
         if (lyricsDialog != null) lyricsDialog.dismiss();
@@ -170,7 +193,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
     private void padding(View view, int left, int top, int right, int bottom) { view.setPadding(dp(left), dp(top), dp(right), dp(bottom)); }
     private ImageView cover(String source, int radius) {
         ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setBackground(shape(Color.rgb(221, 217, 225), radius)); image.setClipToOutline(true); artwork.show(image, source); return image;
+        image.setBackground(gradient(Color.rgb(78, 56, 82), Color.rgb(42, 39, 68), radius)); image.setClipToOutline(true); artwork.show(image, source); return image;
     }
     private FrameLayout iconButton(String icon, String description, int color, int bg, int size, final Runnable action) {
         FrameLayout button = new FrameLayout(this); button.setContentDescription(description); button.setFocusable(true); button.setClickable(true);
@@ -185,8 +208,13 @@ public final class MainActivity extends Activity implements PlaybackService.List
         view.setFocusable(true); view.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { action.run(); } }); return view;
     }
 
+    private GradientDrawable ambientBackground() {
+        return new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {
+                Color.rgb(46, 27, 27), Color.rgb(65, 29, 48), Color.rgb(37, 25, 65), Color.rgb(17, 25, 49)});
+    }
+
     private void buildShell() {
-        appRoot = column(); appRoot.setBackgroundColor(BG);
+        appRoot = column(); appRoot.setBackground(ambientBackground());
         if (Build.VERSION.SDK_INT >= 35) {
             appRoot.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
                 @Override public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
@@ -196,109 +224,290 @@ public final class MainActivity extends Activity implements PlaybackService.List
             });
         }
         pageFrame = new FrameLayout(this); appRoot.addView(pageFrame, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout.LayoutParams miniParams = new LinearLayout.LayoutParams(-1, dp(68)); miniParams.setMargins(dp(12), 0, dp(12), dp(4));
-        appRoot.addView(buildMini(), miniParams);
-        nav = row(); padding(nav, 8, 4, 8, 7); appRoot.addView(nav, new LinearLayout.LayoutParams(-1, dp(69)));
+        LinearLayout.LayoutParams miniParams = new LinearLayout.LayoutParams(-1, dp(64)); miniParams.setMargins(dp(14), 0, dp(14), dp(6));
+        miniContainer = buildMini(); miniContainer.setVisibility(View.GONE); appRoot.addView(miniContainer, miniParams);
+        nav = row(); padding(nav, 14, 0, 14, 8); appRoot.addView(nav, new LinearLayout.LayoutParams(-1, dp(72)));
         setContentView(appRoot); renderNavigation();
     }
 
     private View buildMini() {
-        LinearLayout outer = row(); padding(outer, 9, 7, 9, 7); outer.setBackground(outline(Color.rgb(255,255,255), 19, LINE));
-        miniCover = cover(Catalog.SONGS.get(0).artwork, 9); outer.addView(miniCover, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout outer = row(); padding(outer, 8, 7, 8, 7); outer.setBackground(outline(GLASS_STRONG, 30, LINE));
+        miniCover = cover("", 9); outer.addView(miniCover, new LinearLayout.LayoutParams(dp(46), dp(46)));
         LinearLayout info = column(); padding(info, 10, 0, 0, 0);
-        miniTitle = text("Blue Skies", 14, INK, true); miniTitle.setSingleLine(true); miniArtist = text("HoliznaCC0", 11, MUTED, false); miniArtist.setSingleLine(true);
+        miniTitle = text("", 14, INK, true); miniTitle.setSingleLine(true); miniTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        miniArtist = text("", 11, MUTED, false); miniArtist.setSingleLine(true); miniArtist.setEllipsize(android.text.TextUtils.TruncateAt.END);
         info.addView(miniTitle); info.addView(miniArtist); outer.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
-        FrameLayout play = iconButton("play", "Play", INK, Color.TRANSPARENT, 40, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
+        FrameLayout play = iconButton("play", "Play", WHITE, Color.TRANSPARENT, 40, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
         miniPlay = (IconView) play.getChildAt(0); outer.addView(play, new LinearLayout.LayoutParams(dp(40), dp(40)));
-        outer.addView(iconButton("next", "Next track", INK, Color.TRANSPARENT, 40, new Runnable() { @Override public void run() { if (playback != null) playback.next(); } }), new LinearLayout.LayoutParams(dp(40), dp(40)));
+        outer.addView(iconButton("next", "Next track", WHITE, Color.TRANSPARENT, 40, new Runnable() { @Override public void run() { if (playback != null) playback.next(); } }), new LinearLayout.LayoutParams(dp(40), dp(40)));
         outer.setContentDescription("Open now playing"); outer.setFocusable(true);
         outer.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { openPlayer(); } });
         return outer;
     }
     private void renderNavigation() {
         nav.removeAllViews();
-        nav.addView(navItem("home", "Home", "home"), new LinearLayout.LayoutParams(0, -1, 1));
-        nav.addView(navItem("search", "Search", "search"), new LinearLayout.LayoutParams(0, -1, 1));
-        nav.addView(navItem("library", "Library", "library"), new LinearLayout.LayoutParams(0, -1, 1));
-        nav.addView(navItem("queue", "Queue", "queue"), new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout bar = row(); padding(bar, 4, 4, 4, 4); bar.setBackground(outline(GLASS_STRONG, 34, LINE));
+        bar.addView(navItem("home", "Home", "home"), new LinearLayout.LayoutParams(0, -1, 1));
+        bar.addView(navItem("explore", "Explore", "explore"), new LinearLayout.LayoutParams(0, -1, 1));
+        bar.addView(navItem("library", "Library", "library"), new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(bar, new LinearLayout.LayoutParams(0, -1, 1));
+        FrameLayout search = iconButton("search", "Search", WHITE, Color.TRANSPARENT, 56, new Runnable() { @Override public void run() { showTab("search"); } });
+        search.setBackground(outline(tab.equals("search") ? Color.argb(210, 62, 44, 72) : GLASS_STRONG, 32, LINE));
+        search.setSelected(tab.equals("search"));
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(dp(62), -1); searchParams.setMargins(dp(8), 0, 0, 0); nav.addView(search, searchParams);
     }
     private View navItem(final String target, String label, String icon) {
         LinearLayout item = column(); item.setGravity(Gravity.CENTER); item.setContentDescription(label); item.setFocusable(true);
-        boolean active = tab.equals(target); if (active) item.setBackground(shape(WHITE, 22));
-        IconView image = new IconView(this, icon, active ? INK : MUTED); item.addView(image, new LinearLayout.LayoutParams(dp(21), dp(21)));
-        TextView caption = text(label, 10, active ? INK : MUTED, active); caption.setGravity(Gravity.CENTER); item.addView(caption);
+        boolean active = tab.equals(target) || (tab.equals("browse") && target.equals("home")); item.setSelected(active);
+        if (active) item.setBackground(shape(Color.argb(195, 11, 9, 23), 28));
+        IconView image = new IconView(this, icon, active ? WHITE : MUTED); item.addView(image, new LinearLayout.LayoutParams(dp(20), dp(20)));
+        TextView caption = text(label, 10, active ? WHITE : MUTED, active); caption.setGravity(Gravity.CENTER); item.addView(caption);
         item.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { showTab(target); } }); return item;
     }
-    private void showTab(String target) { tab = target; selectedPlaylist = ""; renderNavigation(); renderPage(); }
+    private void showTab(String target) {
+        View focused = getCurrentFocus();
+        if (focused != null) ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(focused.getWindowToken(), 0);
+        tab = target; selectedPlaylist = ""; renderNavigation(); renderPage();
+    }
     private LinearLayout scrollingPage() {
         pageFrame.removeAllViews();
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
-        LinearLayout content = column(); padding(content, 20, 22, 20, 28); scroll.addView(content); pageFrame.addView(scroll);
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout content = column(); padding(content, 20, 14, 20, 30); scroll.addView(content); pageFrame.addView(scroll);
         return content;
     }
     private void renderPage() {
-        searchResultContainer = null;
+        searchResultContainer = null; homeRecentContainer = null; homeDiscoveryContainer = null;
         LinearLayout content = scrollingPage();
         if (tab.equals("home")) renderHome(content);
+        else if (tab.equals("browse")) renderCollection(content);
+        else if (tab.equals("explore")) renderExplore(content);
         else if (tab.equals("search")) renderSearch(content);
         else if (tab.equals("library")) renderLibrary(content);
         else renderQueue(content);
     }
+
     private void heading(LinearLayout content, String eyebrow, String title, String subtitle) {
         TextView tiny = text(eyebrow.toUpperCase(Locale.getDefault()), 10, MUTED, true); tiny.setLetterSpacing(.13f); content.addView(tiny);
-        TextView h = text(title, 32, INK, false); h.setLetterSpacing(-.03f); content.addView(h);
+        TextView h = text(title, 32, INK, true); h.setLetterSpacing(-.03f); content.addView(h);
         if (subtitle != null && !subtitle.isEmpty()) { TextView p = text(subtitle, 13, MUTED, false); padding(p, 0, 3, 0, 0); content.addView(p); }
     }
     private void sectionTitle(LinearLayout content, String title, String subtitle) {
-        TextView h = text(title, 23, INK, false); h.setLetterSpacing(-.02f); content.addView(h);
+        TextView h = text(title, 22, INK, true); h.setLetterSpacing(-.02f); h.setMaxLines(2); h.setEllipsize(android.text.TextUtils.TruncateAt.END); content.addView(h);
         if (subtitle != null) { TextView p = text(subtitle, 12, MUTED, false); padding(p, 0, 4, 0, 0); content.addView(p); }
     }
-    private String greeting() { int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; }
-
     private void renderHome(LinearLayout content) {
-        String date = new SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Calendar.getInstance().getTime());
-        heading(content, date, greeting(), "A little closer to the music you love.");
+        LinearLayout top = row();
+        IconView mark = new IconView(this, "music", ACCENT); top.addView(mark, new LinearLayout.LayoutParams(dp(23), dp(23)));
+        TextView brand = text("FT MUSIC", 13, INK, true); brand.setLetterSpacing(.12f); padding(brand, 9, 0, 0, 0); top.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(iconButton("queue", "Open queue", WHITE, GLASS, 42, new Runnable() { @Override public void run() { showTab("queue"); } }), new LinearLayout.LayoutParams(dp(42), dp(42)));
+        TextView profile = text("FT", 12, WHITE, true); profile.setGravity(Gravity.CENTER); profile.setBackground(outline(GLASS, 24, LINE));
+        profile.setContentDescription("FT account and sync"); profile.setFocusable(true);
+        profile.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { accountMenu(); } });
+        LinearLayout.LayoutParams profileParams = new LinearLayout.LayoutParams(dp(42), dp(42)); profileParams.setMargins(dp(8), 0, 0, 0); top.addView(profile, profileParams); content.addView(top);
+        addGap(content, 23);
+        TextView eyebrow = text("A SPACE FOR YOUR MUSIC", 10, ACCENT, true); eyebrow.setLetterSpacing(.13f); content.addView(eyebrow);
+        TextView title = text("Listen Now", 34, WHITE, true); title.setLetterSpacing(-.035f); padding(title, 0, 3, 0, 0); content.addView(title);
+        addGap(content, 24);
+        homeRecentContainer = column(); content.addView(homeRecentContainer); updateHomeRecents();
+        addGap(content, 30);
+        homeDiscoveryContainer = column(); content.addView(homeDiscoveryContainer); updateHomeDiscovery();
+    }
+
+    private void updateHomeRecents() {
+        if (homeRecentContainer == null) return;
+        homeRecentContainer.removeAllViews();
+        final List<Song> recent = HomeFeed.recent(library.recent(), 12);
+        LinearLayout header = row();
+        TextView title = text("Recents", 22, INK, true); title.setLetterSpacing(-.025f); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        if (!recent.isEmpty()) {
+            TextView all = text("See all  ›", 12, MUTED, true); all.setFocusable(true); padding(all, 10, 8, 0, 8);
+            all.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { librarySection = "recent"; showTab("library"); } }); header.addView(all);
+        }
+        homeRecentContainer.addView(header); addGap(homeRecentContainer, 12);
+        if (recent.isEmpty()) {
+            homeRecentContainer.addView(welcomeCard(), new LinearLayout.LayoutParams(-1, dp(180)));
+        } else {
+            HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.setHorizontalScrollBarEnabled(false); scroll.setClipToPadding(false);
+            LinearLayout cards = row();
+            for (int i = 0; i < recent.size(); i++) cards.addView(recentCard(recent.get(i), recent, i));
+            scroll.addView(cards); homeRecentContainer.addView(scroll);
+        }
+    }
+
+    private View welcomeCard() {
+        FrameLayout card = new FrameLayout(this); card.setBackground(gradient(Color.rgb(117, 63, 89), Color.rgb(52, 43, 88), 22)); card.setClipToOutline(true);
+        View circle = new View(this); circle.setBackground(shape(Color.argb(34, 255, 255, 255), 100));
+        FrameLayout.LayoutParams circleParams = new FrameLayout.LayoutParams(dp(130), dp(130), Gravity.RIGHT | Gravity.TOP); circleParams.setMargins(0, dp(-24), dp(-20), 0); card.addView(circle, circleParams);
+        IconView note = new IconView(this, "music", Color.argb(80, 255, 255, 255));
+        FrameLayout.LayoutParams noteParams = new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.RIGHT | Gravity.TOP); noteParams.setMargins(0, dp(20), dp(20), 0); card.addView(note, noteParams);
+        LinearLayout body = column(); padding(body, 19, 19, 20, 18);
+        TextView label = text("YOUR LISTENING SPACE", 9, Color.rgb(249, 218, 231), true); label.setLetterSpacing(.12f); body.addView(label);
+        TextView headline = text("Find something\nyou love.", 22, WHITE, true); headline.setLetterSpacing(-.02f); padding(headline, 0, 8, 0, 0); body.addView(headline);
+        addGap(body, 13);
+        TextView search = pill("Search music  ›", DARK, WHITE, new Runnable() { @Override public void run() { showTab("search"); } });
+        body.addView(search, new LinearLayout.LayoutParams(-2, -2)); card.addView(body, new FrameLayout.LayoutParams(-1, -1));
+        return card;
+    }
+
+    private View recentCard(final Song song, final List<Song> songs, final int index) {
+        FrameLayout card = new FrameLayout(this); card.setBackground(shape(Color.rgb(55, 39, 62), 18)); card.setClipToOutline(true);
+        card.addView(cover(song.artwork, 18), new FrameLayout.LayoutParams(-1, -1));
+        View shade = new View(this); shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] {Color.TRANSPARENT, Color.argb(230, 12, 10, 22)})); card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout details = column(); padding(details, 15, 0, 15, 14);
+        TextView title = text(song.title, 17, WHITE, true); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); details.addView(title);
+        TextView artist = text(song.artist, 12, Color.rgb(231, 222, 231), false); artist.setSingleLine(true); artist.setEllipsize(android.text.TextUtils.TruncateAt.END); details.addView(artist);
+        card.addView(details, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(220), dp(220)); lp.setMargins(0, 0, dp(12), 0); card.setLayoutParams(lp);
+        card.setContentDescription("Play " + song.title + " by " + song.artist); card.setFocusable(true);
+        card.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { playSongs(songs, index); } });
+        card.setOnLongClickListener(new View.OnLongClickListener() { @Override public boolean onLongClick(View v) { songOptions(song, false); return true; } });
+        return card;
+    }
+
+    private void loadDiscovery() {
+        if (homeLoading) return;
+        homeLoading = true; homeError = ""; final int request = ++homeGeneration; updateHomeDiscovery();
+        homeWorker.execute(new Runnable() { @Override public void run() {
+            try {
+                final List<YouTubeMusicClient.HomeSection> sections = youtube.discover();
+                main.post(new Runnable() { @Override public void run() {
+                    if (request != homeGeneration || isFinishing() || isDestroyed()) return;
+                    homeSections = sections; homeLoading = false; updateHomeDiscovery();
+                } });
+            } catch (final IOException | RuntimeException failure) {
+                main.post(new Runnable() { @Override public void run() {
+                    if (request != homeGeneration || isFinishing() || isDestroyed()) return;
+                    homeLoading = false; homeError = "Couldn’t load music right now. Check your connection and try again."; updateHomeDiscovery();
+                } });
+            }
+        } });
+    }
+
+    private void updateHomeDiscovery() {
+        if (homeDiscoveryContainer == null) return;
+        homeDiscoveryContainer.removeAllViews();
+        if (homeLoading || !homeError.isEmpty() || homeSections.isEmpty()) {
+            sectionTitle(homeDiscoveryContainer, "Discover", "Music from YouTube Music"); addGap(homeDiscoveryContainer, 12);
+            LinearLayout status = column(); padding(status, 17, 16, 17, 16); status.setBackground(outline(GLASS, 18, LINE));
+            TextView message = text(homeLoading ? "Finding music for you…" : !homeError.isEmpty() ? homeError : "No playable tracks were returned.", 13, INK, false); status.addView(message);
+            if (!homeLoading) {
+                TextView note = text("Discovery is experimental. You can still search for a song or paste a video link.", 11, MUTED, false); padding(note, 0, 7, 0, 0); status.addView(note); addGap(status, 12);
+                LinearLayout actions = row();
+                actions.addView(pill("Try again", DARK, WHITE, new Runnable() { @Override public void run() { loadDiscovery(); } }));
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2); params.setMargins(dp(8), 0, 0, 0);
+                actions.addView(pill("Search", WHITE, Color.argb(55, 255, 255, 255), new Runnable() { @Override public void run() { showTab("search"); } }), params); status.addView(actions);
+            }
+            homeDiscoveryContainer.addView(status); return;
+        }
+        for (YouTubeMusicClient.HomeSection section : homeSections) {
+            sectionTitle(homeDiscoveryContainer, section.title, section.subtitle); addGap(homeDiscoveryContainer, 12);
+            HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.setHorizontalScrollBarEnabled(false); scroll.setClipToPadding(false);
+            LinearLayout cards = row();
+            for (YouTubeMusicClient.HomeItem item : section.items) cards.addView(discoveryCard(item, section));
+            scroll.addView(cards); homeDiscoveryContainer.addView(scroll); addGap(homeDiscoveryContainer, 28);
+        }
+        TextView source = text("Discovery is anonymous and experimental; availability may vary.", 11, MUTED, false); homeDiscoveryContainer.addView(source);
+    }
+
+    private View discoveryCard(final YouTubeMusicClient.HomeItem item, final YouTubeMusicClient.HomeSection section) {
+        LinearLayout card = column();
+        ImageView image = cover(item.artwork, 15); card.addView(image, new LinearLayout.LayoutParams(dp(140), dp(140)));
+        TextView title = text(item.title, 13, INK, true); padding(title, 0, 8, 0, 0); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); card.addView(title);
+        TextView artist = text(item.subtitle, 11, MUTED, false); artist.setMaxLines(2); artist.setEllipsize(android.text.TextUtils.TruncateAt.END); card.addView(artist);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(140), -2); lp.setMargins(0, 0, dp(12), 0); card.setLayoutParams(lp);
+        card.setContentDescription((item.song == null ? "Open " + item.kind + " " : "Play ") + item.title); card.setFocusable(true);
+        card.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+            if (item.song == null) openCollection(item);
+            else for (int i = 0; i < section.songs.size(); i++) if (section.songs.get(i).id.equals(item.song.id)) { playSongs(section.songs, i); break; }
+        } });
+        if (item.song != null) card.setOnLongClickListener(new View.OnLongClickListener() { @Override public boolean onLongClick(View v) { songOptions(item.song, false); return true; } });
+        return card;
+    }
+
+    private void openCollection(YouTubeMusicClient.HomeItem item) {
+        if (item == null || item.song != null || item.browseId.isEmpty()) return;
+        openCollection = item; tab = "browse"; selectedPlaylist = ""; renderNavigation(); loadCollection();
+    }
+
+    private void loadCollection() {
+        if (openCollection == null) return;
+        final String browseId = openCollection.browseId;
+        final int request = ++browseGeneration;
+        collectionLoading = true; collectionError = ""; collectionSongs = new ArrayList<Song>();
+        if (tab.equals("browse")) renderPage();
+        homeWorker.execute(new Runnable() { @Override public void run() {
+            try {
+                final List<Song> songs = youtube.browseTracks(browseId);
+                main.post(new Runnable() { @Override public void run() {
+                    if (request != browseGeneration || isFinishing() || isDestroyed()) return;
+                    collectionSongs = songs; collectionLoading = false; if (tab.equals("browse")) renderPage();
+                } });
+            } catch (final IOException | RuntimeException failure) {
+                main.post(new Runnable() { @Override public void run() {
+                    if (request != browseGeneration || isFinishing() || isDestroyed()) return;
+                    collectionLoading = false; collectionError = "Couldn’t load this collection. Check your connection and try again.";
+                    if (tab.equals("browse")) renderPage();
+                } });
+            }
+        } });
+    }
+
+    private void renderCollection(LinearLayout content) {
+        final YouTubeMusicClient.HomeItem item = openCollection;
+        if (item == null) { showTab("home"); return; }
+        LinearLayout top = row();
+        top.addView(iconButton("back", "Back to Home", WHITE, GLASS, 42, new Runnable() { @Override public void run() { showTab("home"); } }), new LinearLayout.LayoutParams(dp(42), dp(42)));
+        TextView kind = text(item.kind.toUpperCase(Locale.ROOT) + " · YOUTUBE MUSIC", 10, MUTED, true); kind.setLetterSpacing(.12f); padding(kind, 12, 0, 0, 0); top.addView(kind); content.addView(top);
+        addGap(content, 24);
+        ImageView cover = cover(item.artwork, 18); LinearLayout.LayoutParams art = new LinearLayout.LayoutParams(dp(190), dp(190)); art.gravity = Gravity.CENTER_HORIZONTAL; content.addView(cover, art);
         addGap(content, 18);
-        LinearLayout hero = column(); padding(hero, 22, 21, 22, 21); hero.setBackground(gradient(Color.rgb(112,83,172), Color.rgb(213,139,118), 22));
-        TextView kicker = text("YOUR LISTENING SPACE", 10, Color.rgb(244,232,252), true); kicker.setLetterSpacing(.13f); hero.addView(kicker);
-        TextView title = text("Find your\nfrequency.", 29, WHITE, false); title.setLetterSpacing(-.025f); padding(title, 0, 9, 0, 8); hero.addView(title);
-        TextView copy = text("A soundtrack for wherever today takes you.", 12, Color.rgb(251,239,244), false); hero.addView(copy);
-        addGap(hero, 15);
-        TextView listen = pill("Play the mix  ›", INK, WHITE, new Runnable() { @Override public void run() { playSongs(Catalog.SONGS, 0); } });
-        hero.addView(listen, new LinearLayout.LayoutParams(-2, -2)); content.addView(hero, new LinearLayout.LayoutParams(-1, dp(225)));
+        TextView title = text(item.title, 28, WHITE, true); title.setLetterSpacing(-.03f); title.setMaxLines(3); title.setEllipsize(android.text.TextUtils.TruncateAt.END); content.addView(title);
+        TextView subtitle = text(item.subtitle, 13, MUTED, false); padding(subtitle, 0, 5, 0, 0); content.addView(subtitle);
         addGap(content, 20);
-        LinearLayout quick1 = row(); quick1.addView(shortcut("heart-filled", "Liked songs", Color.rgb(236, 219, 246), new Runnable() { @Override public void run() { librarySection = "liked"; showTab("library"); } }), new LinearLayout.LayoutParams(0, dp(68), 1));
-        View gap = new View(this); quick1.addView(gap, new LinearLayout.LayoutParams(dp(9), 1));
-        quick1.addView(shortcut("clock", "History", Color.rgb(235, 229, 216), new Runnable() { @Override public void run() { librarySection = "recent"; showTab("library"); } }), new LinearLayout.LayoutParams(0, dp(68), 1)); content.addView(quick1);
-        addGap(content, 9);
-        LinearLayout quick2 = row(); quick2.addView(shortcut("library", "Playlists", Color.rgb(225, 235, 231), new Runnable() { @Override public void run() { librarySection = "playlists"; showTab("library"); } }), new LinearLayout.LayoutParams(0, dp(68), 1));
-        View gap2 = new View(this); quick2.addView(gap2, new LinearLayout.LayoutParams(dp(9), 1));
-        quick2.addView(shortcut("search", "Find music", Color.rgb(247, 224, 219), new Runnable() { @Override public void run() { showTab("search"); } }), new LinearLayout.LayoutParams(0, dp(68), 1)); content.addView(quick2);
-        addGap(content, 29); sectionTitle(content, "Made for your day", "A few mixes from the bundled collection."); addGap(content, 14);
-        HorizontalScrollView horizontal = new HorizontalScrollView(this); horizontal.setHorizontalScrollBarEnabled(false);
-        LinearLayout mixes = row();
-        mixes.addView(mixCard("Slow\nmornings", "images/cover-slow-mornings.webp", Catalog.mix(2,0,4,8,1)));
-        mixes.addView(mixCard("Night\ndrive", "images/cover-night-drive.webp", Catalog.mix(1,5,3,4,8)));
-        mixes.addView(mixCard("Good\nenergy", "images/cover-good-energy.webp", Catalog.mix(7,6,0,9,3)));
-        mixes.addView(mixCard("Focus\nflow", "images/cover-focus-flow.webp", Catalog.mix(8,4,0,2,1)));
-        horizontal.addView(mixes); content.addView(horizontal);
-        addGap(content, 28); sectionTitle(content, "Quick picks", "Full-length CC0 tracks, ready to play."); addGap(content, 11);
-        for (int i = 0; i < Math.min(5, Catalog.SONGS.size()); i++) content.addView(songRow(Catalog.SONGS.get(i), Catalog.SONGS, i, false));
+        if (!collectionSongs.isEmpty()) content.addView(pill("Play all  ›", DARK, WHITE, new Runnable() { @Override public void run() { playSongs(collectionSongs, 0); } }), new LinearLayout.LayoutParams(-2, -2));
+        addGap(content, 20);
+        if (collectionLoading) { empty(content, "Loading tracks", "Finding songs in this collection…"); return; }
+        if (!collectionError.isEmpty() || collectionSongs.isEmpty()) {
+            empty(content, "No tracks available", collectionError.isEmpty() ? "No playable tracks were returned for this collection." : collectionError); addGap(content, 12);
+            LinearLayout actions = row();
+            actions.addView(pill("Try again", DARK, WHITE, new Runnable() { @Override public void run() { loadCollection(); } }));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2); params.setMargins(dp(8), 0, 0, 0);
+            actions.addView(pill("Search instead", WHITE, GLASS_STRONG, new Runnable() { @Override public void run() { searchMood(item.title); } }), params); content.addView(actions);
+            return;
+        }
+        sectionTitle(content, "Tracks", collectionSongs.size() + (collectionSongs.size() == 1 ? " song" : " songs") + " · first page"); addGap(content, 10);
+        for (int i = 0; i < collectionSongs.size(); i++) content.addView(songRow(collectionSongs.get(i), collectionSongs, i, false));
     }
-    private View shortcut(String icon, String label, int tint, final Runnable action) {
-        LinearLayout tile = row(); tile.setBackground(shape(WHITE, 15)); tile.setContentDescription(label); tile.setFocusable(true);
-        FrameLayout square = new FrameLayout(this); square.setBackground(shape(tint, 14)); IconView glyph = new IconView(this, icon, INK);
-        square.addView(glyph, new FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER)); tile.addView(square, new LinearLayout.LayoutParams(dp(55), -1));
-        TextView name = text(label, 13, INK, true); padding(name, 11, 0, 4, 0); name.setMaxLines(2); tile.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-        tile.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { action.run(); } }); return tile;
+
+    private void renderExplore(LinearLayout content) {
+        heading(content, "FIND YOUR SOUND", "Explore", "Choose a mood to search YouTube Music."); addGap(content, 23);
+        String[][] moods = {{"Chill", "chill songs"}, {"Focus", "focus music"}, {"Feel good", "feel good songs"}, {"Energy", "workout songs"},
+                {"Party", "party songs"}, {"Romance", "romantic songs"}, {"Indie", "indie music"}, {"Night drive", "night drive songs"}};
+        int[][] colors = {{0xff6886ad, 0xff40516f}, {0xff527a78, 0xff304e59}, {0xffa26c8b, 0xff6b476d}, {0xffca8261, 0xff8b4d50},
+                {0xff8f70b8, 0xff584677}, {0xffad586e, 0xff713d53}, {0xff5b8992, 0xff34565e}, {0xff626ca6, 0xff383f6b}};
+        for (int i = 0; i < moods.length; i += 2) {
+            LinearLayout line = row();
+            line.addView(moodTile(moods[i][0], moods[i][1], colors[i][0], colors[i][1]), new LinearLayout.LayoutParams(0, dp(120), 1));
+            View gap = new View(this); line.addView(gap, new LinearLayout.LayoutParams(dp(10), 1));
+            line.addView(moodTile(moods[i + 1][0], moods[i + 1][1], colors[i + 1][0], colors[i + 1][1]), new LinearLayout.LayoutParams(0, dp(120), 1));
+            content.addView(line); addGap(content, 10);
+        }
+        addGap(content, 10);
+        TextView note = text("Each mood runs a new search. Results and playback depend on YouTube Music’s experimental connection.", 11, MUTED, false); content.addView(note);
     }
-    private View mixCard(String name, String art, final List<Song> mix) {
-        FrameLayout card = new FrameLayout(this); card.setBackground(shape(Color.rgb(61,56,78), 17)); card.setClipToOutline(true); card.setContentDescription("Play " + name.replace('\n', ' ')); card.setFocusable(true);
-        card.addView(cover(art, 17), new FrameLayout.LayoutParams(-1, -1));
-        View shade = new View(this); shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, Color.argb(220, 20, 18, 27)})); card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
-        TextView title = text(name, 18, WHITE, true); padding(title, 13, 0, 10, 13); FrameLayout.LayoutParams pos = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM); card.addView(title, pos);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(145), dp(173)); lp.setMargins(0, 0, dp(11), 0); card.setLayoutParams(lp);
-        card.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { playSongs(mix, 0); } }); return card;
+
+    private View moodTile(String title, final String query, int first, int second) {
+        FrameLayout tile = new FrameLayout(this); tile.setBackground(gradient(first, second, 20)); tile.setClipToOutline(true);
+        View circle = new View(this); circle.setBackground(shape(Color.argb(30, 255, 255, 255), 100));
+        FrameLayout.LayoutParams circleParams = new FrameLayout.LayoutParams(dp(100), dp(100), Gravity.RIGHT | Gravity.BOTTOM); circleParams.setMargins(0, 0, dp(-12), dp(-20)); tile.addView(circle, circleParams);
+        IconView glyph = new IconView(this, "music", Color.argb(85, 255, 255, 255));
+        FrameLayout.LayoutParams icon = new FrameLayout.LayoutParams(dp(45), dp(45), Gravity.RIGHT | Gravity.BOTTOM); icon.setMargins(0, 0, dp(15), dp(13)); tile.addView(glyph, icon);
+        LinearLayout labels = column(); padding(labels, 15, 14, 12, 12);
+        TextView name = text(title, 18, WHITE, true); name.setLetterSpacing(-.02f); labels.addView(name);
+        TextView browse = text("Explore  ›", 11, Color.argb(215, 255, 255, 255), true); padding(browse, 0, 5, 0, 0); labels.addView(browse); tile.addView(labels);
+        tile.setContentDescription("Search YouTube Music for " + query); tile.setFocusable(true);
+        tile.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { searchMood(query); } }); return tile;
     }
 
     private View songRow(final Song song, final List<Song> tracks, final int index, final boolean inPlaylist) {
@@ -364,30 +573,30 @@ public final class MainActivity extends Activity implements PlaybackService.List
             final LibraryStore.Playlist playlist = library.playlist(selectedPlaylist);
             if (playlist.id.isEmpty()) { selectedPlaylist = ""; renderLibrary(content); return; }
             LinearLayout top = row();
-            top.addView(iconButton("back", "Back to playlists", INK, WHITE, 40, new Runnable() { @Override public void run() { selectedPlaylist = ""; renderPage(); } }), new LinearLayout.LayoutParams(dp(40), dp(40)));
+            top.addView(iconButton("back", "Back to playlists", INK, GLASS_STRONG, 40, new Runnable() { @Override public void run() { selectedPlaylist = ""; renderPage(); } }), new LinearLayout.LayoutParams(dp(40), dp(40)));
             TextView back = text("YOUR PLAYLIST", 10, MUTED, true); back.setLetterSpacing(.12f); padding(back, 11, 0, 0, 0); top.addView(back, new LinearLayout.LayoutParams(0, -2, 1));
-            top.addView(iconButton("more", "Playlist options", INK, WHITE, 40, new Runnable() { @Override public void run() {
+            top.addView(iconButton("more", "Playlist options", INK, GLASS_STRONG, 40, new Runnable() { @Override public void run() {
                 new AlertDialog.Builder(MainActivity.this).setTitle("Delete “" + playlist.name + "”?").setMessage("This removes the playlist locally. It will also be removed from your account the next time you sync.")
                         .setNegativeButton("Cancel", null).setPositiveButton("Delete", new DialogInterface.OnClickListener() { @Override public void onClick(DialogInterface dialog, int which) { library.deletePlaylist(playlist.id); selectedPlaylist = ""; renderPage(); } }).show();
             } }), new LinearLayout.LayoutParams(dp(40), dp(40))); content.addView(top);
             addGap(content, 20); heading(content, "YOUR MIX", playlist.name, playlist.songs.size() + (playlist.songs.size() == 1 ? " song" : " songs")); addGap(content, 18);
-            if (!playlist.songs.isEmpty()) content.addView(pill("Play playlist", WHITE, INK, new Runnable() { @Override public void run() { playSongs(playlist.songs, 0); } }), new LinearLayout.LayoutParams(-2, -2));
+            if (!playlist.songs.isEmpty()) content.addView(pill("Play playlist", DARK, WHITE, new Runnable() { @Override public void run() { playSongs(playlist.songs, 0); } }), new LinearLayout.LayoutParams(-2, -2));
             addGap(content, 15);
             if (playlist.songs.isEmpty()) empty(content, "Make it yours", "Add songs using the ••• menu next to a track.");
             for (int i = 0; i < playlist.songs.size(); i++) content.addView(songRow(playlist.songs.get(i), playlist.songs, i, true));
             return;
         }
         heading(content, "YOUR MUSIC", "Your library", "Saved on this device. Account sync is optional."); addGap(content, 12);
-        content.addView(pill(syncClient.signedIn() ? "FT account · " + syncClient.username() : "FT account & sync", INK, WHITE, new Runnable() { @Override public void run() { accountMenu(); } }), new LinearLayout.LayoutParams(-2, -2));
+        content.addView(pill(syncClient.signedIn() ? "FT account · " + syncClient.username() : "FT account & sync", INK, GLASS_STRONG, new Runnable() { @Override public void run() { accountMenu(); } }), new LinearLayout.LayoutParams(-2, -2));
         addGap(content, 8);
-        content.addView(pill("Check for updates", INK, WHITE, new Runnable() { @Override public void run() { checkForUpdates(); } }), new LinearLayout.LayoutParams(-2, -2));
+        content.addView(pill("Check for updates", INK, GLASS_STRONG, new Runnable() { @Override public void run() { checkForUpdates(); } }), new LinearLayout.LayoutParams(-2, -2));
         addGap(content, 18);
         HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.setHorizontalScrollBarEnabled(false); LinearLayout chips = row();
-        chips.addView(libraryChip("liked", "Liked")); chips.addView(libraryChip("playlists", "Playlists")); chips.addView(libraryChip("recent", "History")); chips.addView(libraryChip("downloads", "Downloads")); chips.addView(libraryChip("all", "Songs"));
+        chips.addView(libraryChip("liked", "Liked")); chips.addView(libraryChip("playlists", "Playlists")); chips.addView(libraryChip("recent", "History")); chips.addView(libraryChip("downloads", "Downloads")); chips.addView(libraryChip("all", "Samples"));
         scroll.addView(chips); content.addView(scroll); addGap(content, 26);
         if (librarySection.equals("playlists")) {
             LinearLayout top = row(); TextView label = text("Your playlists", 22, INK, false); top.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
-            top.addView(iconButton("plus", "Create playlist", INK, WHITE, 40, new Runnable() { @Override public void run() { createPlaylist(null); } }), new LinearLayout.LayoutParams(dp(40), dp(40))); content.addView(top); addGap(content, 10);
+            top.addView(iconButton("plus", "Create playlist", INK, GLASS_STRONG, 40, new Runnable() { @Override public void run() { createPlaylist(null); } }), new LinearLayout.LayoutParams(dp(40), dp(40))); content.addView(top); addGap(content, 10);
             List<LibraryStore.Playlist> playlists = library.playlists();
             if (playlists.isEmpty()) empty(content, "Start a playlist", "Collect your favorite tracks in a mix of your own.");
             for (final LibraryStore.Playlist playlist : playlists) {
@@ -406,35 +615,36 @@ public final class MainActivity extends Activity implements PlaybackService.List
     }
     private View libraryChip(final String section, String label) {
         boolean active = librarySection.equals(section);
-        TextView chip = pill(label, active ? WHITE : INK, active ? INK : WHITE, new Runnable() { @Override public void run() { librarySection = section; renderPage(); } });
+        TextView chip = pill(label, active ? DARK : INK, active ? WHITE : GLASS_STRONG, new Runnable() { @Override public void run() { librarySection = section; renderPage(); } });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2); params.setMargins(0, 0, dp(7), 0); chip.setLayoutParams(params); return chip;
     }
     private void empty(LinearLayout content, String title, String message) {
-        LinearLayout box = column(); box.setGravity(Gravity.CENTER); padding(box, 20, 30, 20, 30); box.setBackground(shape(WHITE, 17));
+        LinearLayout box = column(); box.setGravity(Gravity.CENTER); padding(box, 20, 30, 20, 30); box.setBackground(outline(GLASS, 17, LINE));
         TextView h = text(title, 16, INK, true); h.setGravity(Gravity.CENTER); box.addView(h); TextView p = text(message, 12, MUTED, false); p.setGravity(Gravity.CENTER); padding(p, 0, 7, 0, 0); box.addView(p); content.addView(box);
     }
     private void renderQueue(LinearLayout content) {
         heading(content, "UP NEXT", "Your queue", "The order you're listening in."); addGap(content, 22);
         if (playback == null) { empty(content, "Getting things ready", "The player is starting up."); return; }
         List<Song> queue = new ArrayList<Song>(playback.queue());
+        if (queue.isEmpty()) empty(content, "Your queue is empty", "Search for a song to start listening.");
         for (int i = 0; i < queue.size(); i++) {
             final int index = i;
             View item = songRow(queue.get(i), queue, i, false);
-            item.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { if (playback != null) { library.record(playback.queue().get(index)); playback.playQueueIndex(index); } } });
-            if (i == playback.queueIndex()) item.setBackground(shape(Color.rgb(236, 230, 244), 12)); content.addView(item);
+            item.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { if (playback != null) playback.playQueueIndex(index); } });
+            if (i == playback.queueIndex()) item.setBackground(shape(Color.argb(32, 255, 255, 255), 12)); content.addView(item);
         }
     }
 
     private void renderSearch(LinearLayout content) {
-        heading(content, "FIND YOUR NEXT FAVORITE", "Search", "Songs from your device and YouTube Music."); addGap(content, 21);
-        LinearLayout search = row(); search.setBackground(outline(WHITE, 15, LINE)); padding(search, 12, 0, 6, 0);
+        heading(content, "FIND YOUR NEXT FAVORITE", "Search", "Songs, artists, or a YouTube video link."); addGap(content, 21);
+        LinearLayout search = row(); search.setBackground(outline(GLASS_STRONG, 17, LINE)); padding(search, 12, 0, 6, 0);
         IconView icon = new IconView(this, "search", MUTED); search.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
         final EditText input = new EditText(this); input.setSingleLine(true); input.setTextSize(14); input.setTextColor(INK); input.setHintTextColor(MUTED); input.setHint("Song, artist, or video link");
         input.setBackgroundColor(Color.TRANSPARENT); input.setImeOptions(EditorInfo.IME_ACTION_SEARCH); input.setText(searchQuery); padding(input, 10, 0, 4, 0);
         search.addView(input, new LinearLayout.LayoutParams(0, dp(52), 1));
-        search.addView(iconButton("next", "Search YouTube Music", INK, Color.rgb(237,232,246), 38, new Runnable() { @Override public void run() { runSearch(input); } }), new LinearLayout.LayoutParams(dp(38), dp(38)));
+        search.addView(iconButton("next", "Search YouTube Music", WHITE, Color.argb(70, 255, 255, 255), 38, new Runnable() { @Override public void run() { runSearch(input); } }), new LinearLayout.LayoutParams(dp(38), dp(38)));
         content.addView(search, new LinearLayout.LayoutParams(-1, dp(56)));
-        TextView disclaimer = text("YouTube Music search and playback are experimental, use an unofficial interface, and may stop working. No sign-in is required.", 11, MUTED, false);
+        TextView disclaimer = text("Search and playback use an unofficial, experimental YouTube Music connection. No Google sign-in is required.", 11, MUTED, false);
         padding(disclaimer, 2, 11, 2, 0); content.addView(disclaimer); addGap(content, 22);
         searchResultContainer = column(); content.addView(searchResultContainer); updateSearchResults();
         input.addTextChangedListener(new TextWatcher() {
@@ -451,35 +661,63 @@ public final class MainActivity extends Activity implements PlaybackService.List
         });
     }
     private void runSearch(EditText input) {
-        final String query = input.getText().toString().trim();
+        String query = input.getText().toString().trim();
         if (query.isEmpty()) { toast("Enter a song, artist, or YouTube link"); return; }
-        if (query.matches("(?i)^(https?://|(?:www\\.|m\\.|music\\.)?youtube\\.com/|youtu\\.be/).*") && YouTubeMusicClient.videoIdFromLink(query) == null) { searchError = "Paste a valid YouTube video link; playlist-only links are not supported."; searchedOnline = false; updateSearchResults(); return; }
         ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0);
         input.clearFocus();
-        final int request = ++searchGeneration; searching = true; searchedOnline = false; searchError = ""; onlineResults = new ArrayList<Song>(); updateSearchResults();
+        startSearch(query);
+    }
+    private void searchMood(String query) {
+        searchQuery = query; searchGeneration++; searching = false; searchedOnline = false; searchError = ""; onlineResults = new ArrayList<Song>();
+        showTab("search"); startSearch(query);
+    }
+    private void startSearch(final String query) {
+        searchQuery = query;
+        final int request = ++searchGeneration;
+        searching = false; searchedOnline = false; searchError = ""; onlineResults = new ArrayList<Song>();
+        if (query.matches("(?i)^(https?://|(?:www\\.|m\\.|music\\.)?youtube\\.com/|youtu\\.be/).*") && YouTubeMusicClient.videoIdFromLink(query) == null) {
+            searchError = "Paste a valid YouTube video link; playlist-only links are not supported."; updateSearchResults(); return;
+        }
+        searching = true; updateSearchResults();
         searchWorker.execute(new Runnable() { @Override public void run() {
             try {
                 final List<Song> songs = youtube.search(query);
-                main.post(new Runnable() { @Override public void run() { if (request != searchGeneration || isFinishing()) return; onlineResults = songs; searching = false; searchedOnline = true; updateSearchResults(); } });
+                main.post(new Runnable() { @Override public void run() { if (request != searchGeneration || isFinishing() || isDestroyed()) return; onlineResults = songs; searching = false; searchedOnline = true; updateSearchResults(); } });
             } catch (final IOException | RuntimeException failure) {
-                main.post(new Runnable() { @Override public void run() { if (request != searchGeneration || isFinishing()) return; searching = false; searchError = failure.getMessage() == null ? "Search is unavailable. Try again later." : failure.getMessage(); updateSearchResults(); } });
+                main.post(new Runnable() { @Override public void run() { if (request != searchGeneration || isFinishing() || isDestroyed()) return; searching = false; searchError = failure.getMessage() == null ? "Search is unavailable. Try again later." : failure.getMessage(); updateSearchResults(); } });
             }
         } });
+    }
+    private List<Song> searchOnDevice(String query) {
+        String needle = query.trim().toLowerCase(Locale.ROOT);
+        Map<String, Song> matches = new LinkedHashMap<String, Song>();
+        List<Song> candidates = new ArrayList<Song>();
+        candidates.addAll(library.liked()); candidates.addAll(library.recent()); candidates.addAll(downloads.list());
+        for (LibraryStore.Playlist playlist : library.playlists()) candidates.addAll(playlist.songs);
+        candidates.addAll(Catalog.search(query));
+        for (Song song : candidates) {
+            if (matches.size() >= 60) break;
+            if ((song.title + " " + song.artist + " " + song.album).toLowerCase(Locale.ROOT).contains(needle)) matches.put(song.id, song);
+        }
+        return new ArrayList<Song>(matches.values());
     }
     private void updateSearchResults() {
         if (searchResultContainer == null) return;
         searchResultContainer.removeAllViews();
         if (searchQuery.trim().isEmpty()) {
-            sectionTitle(searchResultContainer, "Start with a song", "Search locally, or press search to explore YouTube Music."); addGap(searchResultContainer, 12);
-            for (int i = 0; i < Math.min(4, Catalog.SONGS.size()); i++) searchResultContainer.addView(songRow(Catalog.SONGS.get(i), Catalog.SONGS, i, false)); return;
+            empty(searchResultContainer, "Find your next favorite", "Search YouTube Music or paste a video link. Your own saved songs will appear in local results.");
+            addGap(searchResultContainer, 13);
+            TextView explore = pill("Explore moods  ›", DARK, WHITE, new Runnable() { @Override public void run() { showTab("explore"); } });
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2); params.gravity = Gravity.CENTER_HORIZONTAL; searchResultContainer.addView(explore, params);
+            return;
         }
-        List<Song> local = Catalog.search(searchQuery);
+        List<Song> local = searchOnDevice(searchQuery);
         if (!local.isEmpty()) {
-            sectionTitle(searchResultContainer, "Your collection", local.size() + (local.size() == 1 ? " match" : " matches")); addGap(searchResultContainer, 8);
+            sectionTitle(searchResultContainer, "On this device", local.size() + (local.size() == 1 ? " match" : " matches")); addGap(searchResultContainer, 8);
             for (int i = 0; i < local.size(); i++) searchResultContainer.addView(songRow(local.get(i), local, i, false));
             addGap(searchResultContainer, 20);
         }
-        sectionTitle(searchResultContainer, "YouTube Music", searching ? "Searching…" : !searchError.isEmpty() ? searchError : onlineResults.isEmpty() ? (searchedOnline ? "No songs found. Try a different search." : "Press the search button to explore.") : onlineResults.size() + " results");
+        sectionTitle(searchResultContainer, "YouTube Music", searching ? "Searching…" : !searchError.isEmpty() ? searchError : onlineResults.isEmpty() ? (searchedOnline ? "No songs found. Try a different search." : "Press search to explore.") : onlineResults.size() + " results");
         addGap(searchResultContainer, 8);
         for (int i = 0; i < onlineResults.size(); i++) searchResultContainer.addView(songRow(onlineResults.get(i), onlineResults, i, false));
     }
@@ -505,7 +743,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
         }
     }
     private void openLyrics() {
-        if (playback == null) { toast("The player is starting."); return; }
+        if (playback == null || playback.current() == null) { toast("Choose a song first."); return; }
         if (lyricsDialog != null && lyricsDialog.isShowing()) return;
         lyricsDialog = new LyricsDialog(this, new LyricsDialog.Player() {
             @Override public Song song() { return playback == null ? null : playback.current(); }
@@ -516,7 +754,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
         lyricsDialog.show();
     }
     private void importLyrics() {
-        if (playback == null) return;
+        if (playback == null || playback.current() == null) return;
         pendingLyricsSongId = playback.current().id;
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE); intent.setType("*/*");
         try { startActivityForResult(intent, 301); } catch (Exception failure) { pendingLyricsSongId = ""; toast("No file picker is available."); }
@@ -653,7 +891,6 @@ public final class MainActivity extends Activity implements PlaybackService.List
     private void playSongs(List<Song> songs, int index) {
         if (playback == null) { toast("The player is starting. Try again in a moment."); return; }
         if (songs.isEmpty() || index < 0 || index >= songs.size()) return;
-        library.record(songs.get(index));
         playback.play(songs, index);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 100);
@@ -668,24 +905,31 @@ public final class MainActivity extends Activity implements PlaybackService.List
 
     @Override public void onPlaybackChanged() {
         updateMini(); updatePlayer();
+        Song current = playback == null ? null : playback.current();
+        String currentId = current == null ? "" : current.id;
+        if (homeRecentContainer != null && !currentId.equals(lastRecentSong)) {
+            lastRecentSong = currentId; updateHomeRecents();
+        }
         if (tab.equals("queue") && playerDialog == null) renderPage();
         if (playback != null) {
             final String problem = playback.takeError();
             if (!problem.isEmpty() && !isFinishing()) {
                 final Song song = playback.current();
                 AlertDialog.Builder alert = new AlertDialog.Builder(this).setTitle("Playback unavailable").setMessage(problem).setNegativeButton("Close", null);
-                if (song.isYouTube()) alert.setPositiveButton("Open YouTube Music", new DialogInterface.OnClickListener() { @Override public void onClick(DialogInterface dialog, int which) { openYouTube(song); } });
+                if (song != null && song.isYouTube()) alert.setPositiveButton("Open YouTube Music", new DialogInterface.OnClickListener() { @Override public void onClick(DialogInterface dialog, int which) { openYouTube(song); } });
                 alert.show();
             }
         }
     }
     private void updateMini() {
-        Song song = playback == null ? Catalog.SONGS.get(0) : playback.current();
+        Song song = playback == null ? null : playback.current();
+        if (song == null) { miniContainer.setVisibility(View.GONE); miniSongId = ""; return; }
+        miniContainer.setVisibility(View.VISIBLE);
         miniTitle.setText(song.title);
-        miniArtist.setText(playback != null && playback.isBuffering() ? "Buffering…" : song.artist);
-        artwork.show(miniCover, song.artwork);
-        miniPlay.setKind(playback != null && playback.isPlaying() ? "pause" : "play");
-        View parent = (View) miniPlay.getParent(); parent.setContentDescription(playback != null && playback.isPlaying() ? "Pause" : "Play");
+        miniArtist.setText(playback.isBuffering() ? "Buffering…" : song.artist);
+        if (!song.id.equals(miniSongId)) { miniSongId = song.id; artwork.show(miniCover, song.artwork); }
+        miniPlay.setKind(playback.isPlaying() ? "pause" : "play");
+        View parent = (View) miniPlay.getParent(); parent.setContentDescription(playback.isPlaying() ? "Pause" : "Play");
     }
     private int[] colorsFor(Song song) {
         String art = song.artwork.toLowerCase(Locale.ROOT);
@@ -696,7 +940,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
         return new int[] {Color.rgb(105, 78, 125), Color.rgb(35, 31, 50)};
     }
     private void openPlayer() {
-        if (playback == null) { toast("The player is starting."); return; }
+        if (playback == null || playback.current() == null) { toast("Choose a song first."); return; }
         if (playerDialog != null && playerDialog.isShowing()) return;
         playerDialog = new Dialog(this, android.R.style.Theme_Material_NoActionBar);
         playerDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -739,7 +983,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
         FrameLayout previous = iconButton("previous", "Previous track", WHITE, Color.TRANSPARENT, 54, new Runnable() { @Override public void run() { if (playback != null) playback.previous(); } });
         controls.addView(previous, new LinearLayout.LayoutParams(dp(54), dp(54)));
         View left = new View(this); controls.addView(left, new LinearLayout.LayoutParams(0, 1, 1));
-        FrameLayout play = iconButton("play", "Play", INK, WHITE, 72, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
+        FrameLayout play = iconButton("play", "Play", DARK, WHITE, 72, new Runnable() { @Override public void run() { if (playback != null) playback.toggle(); } });
         playerPlay = (IconView) play.getChildAt(0); FrameLayout.LayoutParams playGlyph = (FrameLayout.LayoutParams) playerPlay.getLayoutParams(); playGlyph.width = dp(30); playGlyph.height = dp(30); playerPlay.setLayoutParams(playGlyph); controls.addView(play, new LinearLayout.LayoutParams(dp(72), dp(72)));
         View right = new View(this); controls.addView(right, new LinearLayout.LayoutParams(0, 1, 1));
         controls.addView(iconButton("next", "Next track", WHITE, Color.TRANSPARENT, 54, new Runnable() { @Override public void run() { if (playback != null) playback.next(); } }), new LinearLayout.LayoutParams(dp(54), dp(54))); body.addView(controls);
@@ -763,6 +1007,7 @@ public final class MainActivity extends Activity implements PlaybackService.List
     private void updatePlayer() {
         if (playerDialog == null || !playerDialog.isShowing() || playback == null || playerTitle == null) return;
         Song song = playback.current();
+        if (song == null) return;
         if (!song.id.equals(displayedPlayerId)) {
             displayedPlayerId = song.id; artwork.show(playerCover, song.artwork);
             int[] colors = colorsFor(song); playerRoot.setBackground(gradient(colors[0], colors[1], 0));

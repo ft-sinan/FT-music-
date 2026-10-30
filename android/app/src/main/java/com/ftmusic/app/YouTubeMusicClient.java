@@ -110,9 +110,203 @@ final class YouTubeMusicClient {
         }
     }
 
+    /** A song or an actual browseable album/playlist; the UI never confuses the two. */
+    static final class HomeItem {
+        final String title, subtitle, artwork, browseId, kind;
+        final Song song;
+        private HomeItem(String title, String subtitle, String artwork, String browseId, String kind, Song song) {
+            this.title = title; this.subtitle = subtitle; this.artwork = artwork;
+            this.browseId = browseId; this.kind = kind; this.song = song;
+        }
+        static HomeItem song(Song song) { return new HomeItem(song.title, song.artist, song.artwork, "", "Song", song); }
+        static HomeItem collection(String title, String subtitle, String artwork, String browseId, String kind) {
+            return new HomeItem(title, subtitle, artwork, browseId, kind, null);
+        }
+        String key() { return song == null ? "browse:" + browseId : song.id; }
+    }
+
+    static final class HomeSection {
+        final String title, subtitle;
+        final List<HomeItem> items;
+        final List<Song> songs;
+        HomeSection(String title, String subtitle, List<HomeItem> items) {
+            this.title = title; this.subtitle = subtitle;
+            this.items = new ArrayList<HomeItem>(items);
+            this.songs = new ArrayList<Song>();
+            for (HomeItem item : items) if (item.song != null) this.songs.add(item.song);
+        }
+        static HomeSection fromSongs(String title, String subtitle, List<Song> songs) {
+            List<HomeItem> items = new ArrayList<HomeItem>();
+            for (Song song : songs) items.add(HomeItem.song(song));
+            return new HomeSection(title, subtitle, items);
+        }
+    }
+
+    List<HomeSection> discover() throws IOException {
+        IOException browseError = null;
+        try {
+            List<HomeSection> sections = parseHome(browseResponse("FEmusic_home"));
+            if (!sections.isEmpty()) return sections;
+        } catch (IOException problem) { browseError = problem; }
+        // If the provider returns only unsupported card types, fall back to a labelled search
+        // rather than showing fake or bundled recommendations.
+        try {
+            List<Song> songs = search("popular songs");
+            List<HomeSection> result = new ArrayList<HomeSection>();
+            if (!songs.isEmpty()) result.add(HomeSection.fromSongs("Discover songs", "Search results for popular songs", songs));
+            return result;
+        } catch (IOException problem) { throw browseError != null ? browseError : problem; }
+    }
+
+    List<Song> browseTracks(String browseId) throws IOException {
+        return parseBrowseTracks(browseResponse(browseId));
+    }
+
+    private JSONObject browseResponse(String browseId) throws IOException {
+        if (browseId == null || !browseId.matches("[A-Za-z0-9_-]{1,200}")) throw new IOException("Invalid music collection.");
+        try {
+            JSONObject client = new JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", MUSIC_VERSION)
+                    .put("hl", Locale.getDefault().getLanguage().isEmpty() ? "en" : Locale.getDefault().getLanguage())
+                    .put("gl", country());
+            JSONObject body = new JSONObject().put("context", new JSONObject().put("client", client)).put("browseId", browseId);
+            return post(MUSIC_ORIGIN + "/youtubei/v1/browse?prettyPrint=false", body,
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36", MUSIC_ORIGIN, "67", MUSIC_VERSION, "");
+        } catch (JSONException problem) {
+            throw new IOException("YouTube Music returned an unexpected discovery response.", problem);
+        }
+    }
+
     private static String country() {
         String country = Locale.getDefault().getCountry().toUpperCase(Locale.ROOT);
         return country.matches("[A-Z]{2}") ? country : "IN";
+    }
+
+    static List<HomeSection> parseHome(JSONObject root) {
+        List<HomeSection> sections = new ArrayList<HomeSection>();
+        visitHome(root, sections, 0);
+        return sections;
+    }
+
+    private static void visitHome(Object node, List<HomeSection> sections, int depth) {
+        if (node == null || depth > 36 || sections.size() >= 6) return;
+        if (node instanceof JSONObject) {
+            JSONObject object = (JSONObject) node;
+            JSONObject shelf = object.optJSONObject("musicCarouselShelfRenderer");
+            if (shelf == null) shelf = object.optJSONObject("musicShelfRenderer");
+            if (shelf != null) {
+                HomeSection section = readHomeShelf(shelf);
+                if (section != null) sections.add(section);
+                return;
+            }
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext() && sections.size() < 6) visitHome(object.opt(keys.next()), sections, depth + 1);
+        } else if (node instanceof JSONArray) {
+            JSONArray array = (JSONArray) node;
+            for (int i = 0; i < array.length() && sections.size() < 6; i++) visitHome(array.opt(i), sections, depth + 1);
+        }
+    }
+
+    private static HomeSection readHomeShelf(JSONObject shelf) {
+        String title = textValue(shelf.optJSONObject("title"));
+        JSONObject header = shelf.optJSONObject("header");
+        JSONObject basic = header == null ? null : header.optJSONObject("musicCarouselShelfBasicHeaderRenderer");
+        if (title.isEmpty() && basic != null) title = textValue(basic.optJSONObject("title"));
+        if (title.isEmpty() && basic != null) title = textValue(basic.optJSONObject("strapline"));
+        if (title.isEmpty()) title = "Discover";
+        if (title.length() > 100) title = title.substring(0, 100);
+        JSONArray contents = shelf.optJSONArray("contents");
+        Map<String, HomeItem> items = new LinkedHashMap<String, HomeItem>();
+        if (contents != null) for (int i = 0; i < contents.length() && items.size() < 16; i++) {
+            JSONObject entry = contents.optJSONObject(i);
+            if (entry == null) continue;
+            JSONObject responsive = entry.optJSONObject("musicResponsiveListItemRenderer");
+            JSONObject twoRow = entry.optJSONObject("musicTwoRowItemRenderer");
+            Song song = responsive != null ? readResponsiveHomeSong(responsive) : twoRow != null ? readHomeSong(twoRow) : null;
+            HomeItem item = song != null ? HomeItem.song(song) : twoRow != null ? readHomeCollection(twoRow) : null;
+            if (item != null && !items.containsKey(item.key())) items.put(item.key(), item);
+        }
+        return items.isEmpty() ? null : new HomeSection(title, "From YouTube Music", new ArrayList<HomeItem>(items.values()));
+    }
+
+    private static Song readResponsiveHomeSong(JSONObject renderer) {
+        JSONObject item = renderer.optJSONObject("playlistItemData");
+        String id = item == null ? "" : item.optString("videoId", "");
+        JSONArray columns = renderer.optJSONArray("flexColumns");
+        if (!isVideoId(id) && columns != null && columns.length() > 0) id = findVideoId(columns.opt(0), 0);
+        if (!isVideoId(id)) id = findVideoId(renderer.optJSONObject("overlay"), 0);
+        return readSongWithId(renderer, id);
+    }
+
+    private static Song readHomeSong(JSONObject renderer) {
+        // A browse endpoint points to an album, artist, or playlist. Do not pretend it is a song.
+        JSONObject navigation = renderer.optJSONObject("navigationEndpoint");
+        JSONObject watch = navigation == null ? null : navigation.optJSONObject("watchEndpoint");
+        String id = watch == null ? "" : watch.optString("videoId", "");
+        if (!isVideoId(id)) return null;
+        String title = textValue(renderer.optJSONObject("title"));
+        if (title.isEmpty()) return null;
+        String artist = textValue(renderer.optJSONObject("subtitle"));
+        if (artist.isEmpty()) artist = "YouTube Music";
+        String image = findThumbnail(renderer, 0);
+        if (image.isEmpty()) image = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+        return new Song("yt:" + id, title, artist, "YouTube Music", image, "", id);
+    }
+
+    private static HomeItem readHomeCollection(JSONObject renderer) {
+        JSONObject navigation = renderer.optJSONObject("navigationEndpoint");
+        JSONObject browse = navigation == null ? null : navigation.optJSONObject("browseEndpoint");
+        if (browse == null) return null;
+        String id = browse.optString("browseId", "");
+        if (!id.matches("[A-Za-z0-9_-]{1,200}")) return null;
+        JSONObject supported = browse.optJSONObject("browseEndpointContextSupportedConfigs");
+        JSONObject config = supported == null ? null : supported.optJSONObject("browseEndpointContextMusicConfig");
+        String pageType = config == null ? "" : config.optString("pageType", "");
+        String kind = pageType.equals("MUSIC_PAGE_TYPE_ALBUM") ? "Album"
+                : pageType.equals("MUSIC_PAGE_TYPE_PLAYLIST") ? "Playlist" : "";
+        if (kind.isEmpty()) return null;
+        String title = textValue(renderer.optJSONObject("title"));
+        if (title.isEmpty()) return null;
+        String subtitle = textValue(renderer.optJSONObject("subtitle"));
+        if (subtitle.isEmpty()) subtitle = kind;
+        String image = findThumbnail(renderer.optJSONObject("thumbnailRenderer"), 0);
+        if (image.isEmpty()) image = findThumbnail(renderer.optJSONObject("thumbnail"), 0);
+        return HomeItem.collection(title, subtitle, image, id, kind);
+    }
+
+    static List<Song> parseBrowseTracks(JSONObject root) {
+        Map<String, Song> found = new LinkedHashMap<String, Song>();
+        visitBrowseTracks(root, found, 0);
+        return new ArrayList<Song>(found.values());
+    }
+    private static void visitBrowseTracks(Object node, Map<String, Song> found, int depth) {
+        if (node == null || depth > 36 || found.size() >= 100) return;
+        if (node instanceof JSONObject) {
+            JSONObject object = (JSONObject) node;
+            JSONObject renderer = object.optJSONObject("musicResponsiveListItemRenderer");
+            if (renderer != null) {
+                Song song = readResponsiveHomeSong(renderer);
+                if (song != null && !found.containsKey(song.id)) found.put(song.id, song);
+                return;
+            }
+            Iterator<String> keys = object.keys();
+            while (keys.hasNext() && found.size() < 100) visitBrowseTracks(object.opt(keys.next()), found, depth + 1);
+        } else if (node instanceof JSONArray) {
+            JSONArray array = (JSONArray) node;
+            for (int i = 0; i < array.length() && found.size() < 100; i++) visitBrowseTracks(array.opt(i), found, depth + 1);
+        }
+    }
+
+    private static String textValue(JSONObject text) {
+        if (text == null) return "";
+        String simple = text.optString("simpleText", "");
+        if (!simple.isEmpty()) return simple.trim();
+        JSONArray runs = text.optJSONArray("runs");
+        StringBuilder joined = new StringBuilder();
+        if (runs != null) for (int i = 0; i < runs.length(); i++) {
+            JSONObject run = runs.optJSONObject(i);
+            if (run != null) joined.append(run.optString("text", ""));
+        }
+        return joined.toString().trim();
     }
 
     static List<Song> parseSearch(JSONObject root) {
@@ -144,6 +338,10 @@ final class YouTubeMusicClient {
         JSONObject playlistData = renderer.optJSONObject("playlistItemData");
         if (playlistData != null) id = playlistData.optString("videoId", "");
         if (!isVideoId(id)) id = findVideoId(renderer, 0);
+        return readSongWithId(renderer, id);
+    }
+
+    private static Song readSongWithId(JSONObject renderer, String id) {
         if (!isVideoId(id)) return null;
         JSONArray columns = renderer.optJSONArray("flexColumns");
         String title = columnText(columns, 0);

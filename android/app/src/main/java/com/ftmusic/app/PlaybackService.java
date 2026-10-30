@@ -131,9 +131,13 @@ public final class PlaybackService extends Service {
 
     void play(List<Song> songs, int selected) { if (songs == null || songs.isEmpty()) return; queue.replace(songs, selected); startCurrent(); }
     void playQueueIndex(int index) { if (queue.select(index)) startCurrent(); }
-    void addToQueue(Song song) { queue.add(song); notifyListener(); }
+    void addToQueue(Song song) { queue.add(song); publish(); }
 
     private void startCurrent() {
+        final Song song = current();
+        if (song == null) return;
+        // Record tracks started from the UI, notifications, and automatic queue advancement.
+        new LibraryStore(this).record(song);
         generation++;
         final int request = generation;
         releasePlayer();
@@ -156,7 +160,6 @@ public final class PlaybackService extends Service {
         main.postDelayed(new Runnable() { @Override public void run() {
             if (request == generation && !prepared && buffering) fail("This track is taking too long to load. Check your connection and try again.");
         } }, 30000);
-        final Song song = current();
         File offline = OfflineDownloads.get(this).fileFor(song);
         if (offline != null) {
             prepare(song, null, offline, request);
@@ -242,6 +245,7 @@ public final class PlaybackService extends Service {
 
     void toggle() { if (playing || (buffering && wantsPlay)) pause(); else resume(); }
     void resume() {
+        if (current() == null) return;
         wantsPlay = true;
         if (mediaPlayer == null) { startCurrent(); return; }
         if (!prepared) { publish(); return; }
@@ -310,12 +314,20 @@ public final class PlaybackService extends Service {
                 .build();
     }
     private void publishSession() {
+        Song song = current();
+        if (song == null) {
+            mediaSession.setActive(false);
+            mediaSession.setMetadata(null);
+            mediaSession.setPlaybackState(new PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build());
+            return;
+        }
+        mediaSession.setActive(true);
         long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE |
                 PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_SEEK_TO | PlaybackState.ACTION_STOP;
         int state = buffering ? PlaybackState.STATE_BUFFERING : playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
         mediaSession.setPlaybackState(new PlaybackState.Builder().setActions(actions).setState(state, position(), playing ? 1f : 0f).build());
-        mediaSession.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_MEDIA_ID, current().id).putString(MediaMetadata.METADATA_KEY_TITLE, current().title)
-                .putString(MediaMetadata.METADATA_KEY_ARTIST, current().artist).putString(MediaMetadata.METADATA_KEY_ALBUM, current().album)
+        mediaSession.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_MEDIA_ID, song.id).putString(MediaMetadata.METADATA_KEY_TITLE, song.title)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, song.artist).putString(MediaMetadata.METADATA_KEY_ALBUM, song.album)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, duration()).build());
     }
     private void publish() {

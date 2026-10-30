@@ -29,6 +29,7 @@ final class IconView extends View {
         paint.setColor(color); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(1.8f); paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeJoin(Paint.Join.ROUND);
         if (kind.equals("home")) { path(canvas, 3, 10, 12, 3, 21, 10, 21, 20, 3, 20, 3, 10); path(canvas, 9, 20, 9, 13, 15, 13, 15, 20); }
         else if (kind.equals("search")) { canvas.drawCircle(10, 10, 6.2f, paint); line(canvas, 15, 15, 21, 21); }
+        else if (kind.equals("explore")) { canvas.drawRoundRect(3, 3, 10, 10, 1.5f, 1.5f, paint); canvas.drawRoundRect(14, 3, 21, 10, 1.5f, 1.5f, paint); canvas.drawRoundRect(3, 14, 10, 21, 1.5f, 1.5f, paint); canvas.drawRoundRect(14, 14, 21, 21, 1.5f, 1.5f, paint); }
         else if (kind.equals("library")) { canvas.drawRoundRect(3, 4, 8, 20, 1, 1, paint); canvas.drawRoundRect(10, 4, 15, 20, 1, 1, paint); path(canvas, 17, 5, 19, 4, 22, 19, 20, 20, 17, 5); }
         else if (kind.equals("queue")) { line(canvas, 4, 6, 19, 6); line(canvas, 4, 11, 19, 11); line(canvas, 4, 16, 14, 16); path(canvas, 17, 15, 17, 21, 21, 18, 17, 15); }
         else if (kind.equals("play")) { paint.setStyle(Paint.Style.FILL); path(canvas, 7, 3, 20, 12, 7, 21, 7, 3); }
