@@ -60,7 +60,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash -o pipefail -c 'python3 android/tests/UiSmoke.py 2>&1 | tee "$RUNNER_TEMP/ft-ui-log.txt"'
+          script: bash -o pipefail -c 'python3 android/tests/UiSmoke.py 2>&1 | tee "$RUNNER_TEMP/ft-ui-log.txt" && python3 .github/ft-playback-probe.py 2>&1 | tee "$RUNNER_TEMP/ft-playback-log.txt"'
       - name: Make temporary screenshots and diagnostics reviewable
         if: always()
         env:
