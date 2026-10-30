@@ -13,38 +13,19 @@ jobs:
   sign:
     if: github.repository == 'ft-sinan/FT-music-' && github.ref == 'refs/heads/arena/3c1c13cb-ft-music'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      # This runner does not execute Gradle or imported app code. Both source and
-      # the previously tested unsigned APK are pinned to reviewed commits/runs.
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: 7ebf239e5b3aa56163cd5952a9cb2488317e3f86
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21'
+      # Reuse the APK signed by the isolated, secret-bearing job in run 41055010745.
+      # This retry does not need the passphrase or private key.
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: ft-music-unsigned-apk
-          path: ${{ runner.temp }}/ft-unsigned
-          run-id: 41050504310
+          name: ft-v0.5.0-signed
+          path: ${{ runner.temp }}/ft-signed
+          run-id: 41055010745
           github-token: ${{ github.token }}
-      - name: Sign the verified APK with the established certificate
-        env:
-          FT_MUSIC_KEY_PASSPHRASE: ${{ secrets.FT_MUSIC_KEY_PASSPHRASE }}
+      - name: Verify the signed artifact digest
         run: |
-          set -euo pipefail
-          mapfile -t FILES < <(find "$RUNNER_TEMP/ft-unsigned" -maxdepth 1 -name '*-unsigned.apk' -type f)
-          [[ ${#FILES[@]} == 1 ]]
-          export FT_UNSIGNED_APK="${FILES[0]}"
-          umask 077
-          KEY_DIR=$(mktemp -d "$RUNNER_TEMP/ft-signing.XXXXXXXX")
-          trap 'rm -rf "$KEY_DIR"' EXIT
-          android/scripts/unseal-signing.sh "$KEY_DIR"
-          android/scripts/sign-release.sh "$KEY_DIR/temp-key.pk8" "$KEY_DIR/temp-cert.der" "$RUNNER_TEMP/ft-signed"
-          sha=$(sha256sum "$RUNNER_TEMP/ft-signed/FT-Music-v0.5.0.apk" | cut -d' ' -f1)
-          echo "::notice title=SIGNED_APK_SHA256::$sha"
+          echo 'db186e13888ce2112842fe83074e6867eadc6216ba97e3894af0b8c388dc5a69  '"$RUNNER_TEMP/ft-signed/FT-Music-v0.5.0.apk" | sha256sum -c -
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ft-v0.5.0-signed
@@ -111,7 +92,7 @@ jobs:
               else:
                   raise AssertionError('The old playlist name field was not found')
               adb('shell', 'input', 'text', marker)
-              tap('Create')
+              tap('CREATE')
               wait_for(marker)
               capture('old-playlist')
               adb('shell', 'am', 'force-stop', PACKAGE)
