@@ -82,6 +82,8 @@ public final class NativeCoreTest {
                 .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))
                 .put(new JSONObject().put("musicResponsiveListItemRenderer", renderer))));
         check(albumTracks.size() == 1 && albumTracks.get(0).videoId.equals(id), "browse returns only primary playable tracks and removes duplicates");
+        try { new YouTubeMusicClient().browseTracks("../bad"); throw new AssertionError("invalid collection ID must fail"); }
+        catch (IOException expected) { check(expected.getMessage().contains("Invalid"), "reject invalid collection IDs before networking"); }
         List<Song> recent = HomeFeed.recent(Arrays.asList(Catalog.SONGS.get(0), songs.get(0), Catalog.SONGS.get(1), songs.get(0)), 12);
         check(recent.size() == 1 && recent.get(0).id.equals("yt:" + id), "home history excludes bundled samples and duplicates");
         check(HomeFeed.recent(Arrays.asList(songs.get(0)), 0).isEmpty() && HomeFeed.recent(null, 3).isEmpty(), "home history handles empty inputs");

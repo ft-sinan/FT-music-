@@ -1024,8 +1024,12 @@ public final class MainActivity extends Activity implements PlaybackService.List
     private void updateProgress() {
         if (playback == null || playerDialog == null || !playerDialog.isShowing() || seekBar == null) return;
         int duration = playback.duration(), position = playback.position();
-        if (!seeking) seekBar.setProgress(duration > 0 ? (int) Math.min(1000, (long) position * 1000 / duration) : 0);
-        seekBar.setEnabled(duration > 0); playerTime.setText(formatTime(position)); playerDuration.setText(formatTime(duration));
+        int progress = duration > 0 ? (int) Math.min(1000, (long) position * 1000 / duration) : 0;
+        if (!seeking && seekBar.getProgress() != progress) seekBar.setProgress(progress);
+        if (seekBar.isEnabled() != (duration > 0)) seekBar.setEnabled(duration > 0);
+        String positionText = formatTime(position), durationText = formatTime(duration);
+        if (!positionText.contentEquals(playerTime.getText())) playerTime.setText(positionText);
+        if (!durationText.contentEquals(playerDuration.getText())) playerDuration.setText(durationText);
     }
     private String formatTime(long millis) {
         long seconds = Math.max(0, millis / 1000); return String.format(Locale.getDefault(), "%d:%02d", seconds / 60, seconds % 60);

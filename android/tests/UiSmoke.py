@@ -106,6 +106,8 @@ def main():
         adb("shell", "input", "keyevent", "4")  # hide keyboard
         tap("Play Blue Skies")
         wait_for("Open now playing")
+        wait_for('content-desc="Pause"')
+        tap("Pause")
         tap("Home")
         current_home = wait_for("Listen Now")
         if 'content-desc="Play Blue Skies"' in current_home:
@@ -120,7 +122,13 @@ def main():
     except Exception:
         try:
             screenshot("failure")
+        except Exception:
+            pass
+        try:
             (OUTPUT / "failure.xml").write_text(dump(), encoding="utf-8")
+        except Exception:
+            pass
+        try:
             (OUTPUT / "logcat.txt").write_bytes(adb("logcat", "-d", "-s", "AndroidRuntime:E", check=False).stdout)
         except Exception:
             pass
