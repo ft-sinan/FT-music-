@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 import time
+import traceback
 import xml.etree.ElementTree as ET
 
 APK = pathlib.Path("android/app/build/outputs/apk/debug/app-debug.apk")
@@ -108,6 +109,16 @@ def main():
             raise AssertionError("FT Music process is not running")
         print("Android UI smoke: Home, Explore, Search, Library, empty queue and explicit playback passed")
         print("Screenshots:", OUTPUT)
+    except Exception:
+        try:
+            screenshot("failure")
+            (OUTPUT / "failure.xml").write_text(dump(), encoding="utf-8")
+            (OUTPUT / "logcat.txt").write_bytes(adb("logcat", "-d", "-s", "AndroidRuntime:E", check=False).stdout)
+        except Exception:
+            pass
+        message = traceback.format_exc()[:3500].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+        print("::error title=Android UI smoke::" + message, flush=True)
+        raise
     finally:
         adb("shell", "svc", "wifi", "enable", check=False)
         adb("shell", "svc", "data", "enable", check=False)
