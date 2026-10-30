@@ -88,6 +88,8 @@ def main():
         wait_for("Anonymous")
         tap("Anonymous")
         wait_for("Login")
+        # This checks that the provider's page loaded, without entering credentials.
+        wait_for("Sign in", timeout=60)
         capture("login")
         if not adb("shell", "pidof", PACKAGE, check=False).stdout.strip():
             raise AssertionError("FT Music process exited unexpectedly")
