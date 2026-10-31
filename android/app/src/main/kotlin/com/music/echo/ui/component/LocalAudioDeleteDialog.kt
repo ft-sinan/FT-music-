@@ -65,7 +65,7 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
       error = R.string.ft_delete_device_cancelled
       stage = "idle"
     } else {
-      stage = if (stage == "wait_grant") "retry" else "verify"
+      stage = "verify"
     }
   }
 
@@ -84,17 +84,12 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
       }
     }
 
-    fun handleDirect(result: LocalAudioFileDeletion.DeleteResult, allowConsent: Boolean) {
+    fun handleDirect(result: LocalAudioFileDeletion.DeleteResult) {
       when (result) {
         LocalAudioFileDeletion.DeleteResult.Deleted -> stage = "finalize_deleted"
         LocalAudioFileDeletion.DeleteResult.Missing -> stage = "finalize_missing"
         LocalAudioFileDeletion.DeleteResult.Changed -> fail(R.string.ft_delete_device_changed)
         LocalAudioFileDeletion.DeleteResult.Failed -> fail(R.string.ft_delete_device_failed)
-        is LocalAudioFileDeletion.DeleteResult.NeedsConsent -> {
-          if (allowConsent && Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-            launchConsent(result.sender, "wait_grant")
-          } else fail(R.string.ft_delete_device_failed)
-        }
       }
     }
 
@@ -107,7 +102,7 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
           val confirmed = confirmedTarget?.let { LocalAudioFileDeletion.Target.decode(it) }
           if (confirmed == null || confirmed != inspected.target) {
             fail(R.string.ft_delete_device_changed)
-          } else if (Build.VERSION.SDK_INT <= 28 &&
+          } else if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             try {
               stage = "wait_permission"
@@ -118,14 +113,9 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
             if (sender == null) fail(R.string.ft_delete_device_failed)
             else launchConsent(sender, "wait_delete")
           } else {
-            handleDirect(deletion.deleteDirect(song, confirmed), allowConsent = true)
+            handleDirect(deletion.deleteDirect(song, confirmed))
           }
         }
-      }
-      "retry" -> {
-        val confirmed = confirmedTarget?.let { LocalAudioFileDeletion.Target.decode(it) }
-        if (confirmed == null) fail(R.string.ft_delete_device_changed)
-        else handleDirect(deletion.deleteDirect(song, confirmed), allowConsent = false)
       }
       "verify" -> {
         var presence = deletion.presence(song.id)

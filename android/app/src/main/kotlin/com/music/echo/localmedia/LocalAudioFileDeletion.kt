@@ -1,11 +1,11 @@
 package echo.music.iad1tya.localmedia
 
-import android.app.RecoverableSecurityException
 import android.content.Context
 import android.content.IntentSender
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import android.system.Os
 import android.system.OsConstants
@@ -15,7 +15,6 @@ import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -29,7 +28,7 @@ class LocalAudioFileDeletion(private val context: Context) {
     val modifiedSeconds: Long,
     val title: String,
     val durationSeconds: Int,
-    // Android 9's MediaStore can remove an audio row without removing its file.
+    // Android 9 and 10 can remove a media row without removing the audio file.
     // Record the canonical path and inode that the user actually confirmed.
     val legacyPath: String? = null,
     val legacyDevice: Long? = null,
@@ -66,7 +65,6 @@ class LocalAudioFileDeletion(private val context: Context) {
     data object Missing : DeleteResult
     data object Changed : DeleteResult
     data object Failed : DeleteResult
-    data class NeedsConsent(val sender: IntentSender) : DeleteResult
   }
 
   enum class Presence { PRESENT, MISSING, UNKNOWN }
@@ -86,6 +84,10 @@ class LocalAudioFileDeletion(private val context: Context) {
   suspend fun inspect(song: Song): Inspection = withContext(Dispatchers.IO) {
     if (!song.song.isLocal) return@withContext Inspection.Unavailable
     val uri = audioUri(song.id) ?: return@withContext Inspection.Unavailable
+    if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q && !Environment.isExternalStorageLegacy()) {
+      // Never claim success from a MediaStore row deletion if the actual file might remain.
+      return@withContext Inspection.Unavailable
+    }
     val expectedSize = song.format?.contentLength?.takeIf { it > 0 } ?: return@withContext Inspection.Changed
     try {
       @Suppress("DEPRECATION")
@@ -95,7 +97,7 @@ class LocalAudioFileDeletion(private val context: Context) {
         add(MediaStore.Audio.Media.SIZE)
         add(MediaStore.Audio.Media.DATE_MODIFIED)
         add(MediaStore.Audio.Media.DURATION)
-        if (Build.VERSION.SDK_INT <= 28) add(MediaStore.Audio.Media.DATA)
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) add(MediaStore.Audio.Media.DATA)
       }.toTypedArray()
       context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
         if (!cursor.moveToFirst()) return@withContext Inspection.Missing
@@ -115,7 +117,7 @@ class LocalAudioFileDeletion(private val context: Context) {
         val expected = LocalAudioFingerprint(song.song.title, expectedSize, if (scannedDate == null) null else modified, song.song.duration)
         val actual = LocalAudioFingerprint(title, size, modified, duration)
         if (!LocalAudioDeletionPolicy.matches(expected, actual, name)) return@withContext Inspection.Changed
-        if (Build.VERSION.SDK_INT <= 28) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
           val rawPath = cursor.getString(5)?.takeIf { it.isNotBlank() } ?: return@withContext Inspection.Unavailable
           val rawFile = File(rawPath)
           if (!rawFile.isAbsolute) return@withContext Inspection.Unavailable
@@ -146,33 +148,19 @@ class LocalAudioFileDeletion(private val context: Context) {
     } catch (_: Exception) { Presence.UNKNOWN }
   }
 
-  /** On Android 10 this can ask Android for write consent before retrying the same deletion. */
+  /** On Android 9/10, delete the verified file first, then its matching MediaStore row. */
   suspend fun deleteDirect(song: Song, expectedTarget: Target): DeleteResult = withContext(Dispatchers.IO) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return@withContext DeleteResult.Failed
     when (val inspected = inspect(song)) {
-      Inspection.Missing -> return@withContext DeleteResult.Missing
-      Inspection.Changed -> return@withContext DeleteResult.Changed
-      Inspection.Unavailable -> return@withContext DeleteResult.Failed
-      is Inspection.Ready -> {
-        if (inspected.target != expectedTarget) return@withContext DeleteResult.Changed
-        if (Build.VERSION.SDK_INT <= 28) return@withContext deleteLegacy(inspected.target)
-        try {
-          if (context.contentResolver.delete(inspected.target.uri, null, null) == 1) DeleteResult.Deleted
-          else if (presence(song.id) == Presence.MISSING) DeleteResult.Missing else DeleteResult.Failed
-        } catch (e: SecurityException) {
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && e is RecoverableSecurityException) {
-            DeleteResult.NeedsConsent(e.userAction.actionIntent.intentSender)
-          } else DeleteResult.Failed
-        } catch (e: CancellationException) {
-          throw e
-        } catch (_: Exception) {
-          DeleteResult.Failed
-        }
-      }
+      Inspection.Missing -> DeleteResult.Missing
+      Inspection.Changed -> DeleteResult.Changed
+      Inspection.Unavailable -> DeleteResult.Failed
+      is Inspection.Ready -> if (inspected.target != expectedTarget) DeleteResult.Changed
+        else deleteLegacy(inspected.target)
     }
   }
 
-  /** API 28's MediaProvider deletes audio metadata but may leave the actual audio file. */
+  /** Older MediaProviders can delete audio metadata while leaving the actual file. */
   private fun deleteLegacy(target: Target): DeleteResult {
     val path = target.legacyPath ?: return DeleteResult.Failed
     val file = File(path)

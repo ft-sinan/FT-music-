@@ -79,9 +79,16 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("LocalAudioDeleteDialog(", activity)
         self.assertIn("SavedStateHandle", controller)
         self.assertIn("MediaStore.createDeleteRequest", deletion)
-        self.assertIn("RecoverableSecurityException", deletion)
+        self.assertIn("Environment.isExternalStorageLegacy()", deletion)
+        self.assertIn("WRITE_EXTERNAL_STORAGE", dialog)
+        self.assertIn("deleteLegacy(inspected.target)", deletion)
         self.assertIn("deleteLocalSongById(song.id)", dialog)
         self.assertIn("WHERE id = :songId AND isLocal = 1", dao)
+        manifest = ET.parse(MAIN / "AndroidManifest.xml").getroot()
+        self.assertEqual(manifest.find("application").get(ANDROID + "requestLegacyExternalStorage"), "true")
+        write = next(el for el in manifest.findall("uses-permission")
+                     if el.get(ANDROID + "name") == "android.permission.WRITE_EXTERNAL_STORAGE")
+        self.assertEqual(write.get(ANDROID + "maxSdkVersion"), "29")
 
     def test_search_suggestions_pass_song_metadata_to_local_matcher(self):
         suggestions = (MAIN / "kotlin/com/music/echo/ui/screens/search/suggestions/SuggestionsViewModel.kt").read_text()

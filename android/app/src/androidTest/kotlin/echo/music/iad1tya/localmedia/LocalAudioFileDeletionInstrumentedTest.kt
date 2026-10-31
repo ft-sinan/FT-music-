@@ -47,7 +47,12 @@ class LocalAudioFileDeletionInstrumentedTest {
     context = instrumentation.targetContext
     val audioPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     instrumentation.uiAutomation.grantRuntimePermission(context.packageName, audioPermission)
-    if (Build.VERSION.SDK_INT <= 28) instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+      instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    }
+    if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+      assertTrue("Android 10 legacy storage mode is required to delete the actual file", Environment.isExternalStorageLegacy())
+    }
     deletion = LocalAudioFileDeletion(context)
   }
 
@@ -79,6 +84,12 @@ class LocalAudioFileDeletionInstrumentedTest {
     val inserted = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)!!
     val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, ContentUris.parseId(inserted))
     created += uri
+    if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+      @Suppress("DEPRECATION")
+      context.contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DATA), null, null, null)?.use {
+        if (it.moveToFirst()) it.getString(0)?.let { path -> createdFiles += File(path) }
+      }
+    }
     context.contentResolver.openOutputStream(uri, "w")!!.use { it.write(bytes) }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
@@ -186,7 +197,7 @@ class LocalAudioFileDeletionInstrumentedTest {
   }
 
   @Test fun legacyReplacementAfterConfirmationIsNotDeleted() = runBlocking {
-    if (Build.VERSION.SDK_INT > 28) return@runBlocking
+    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) return@runBlocking
     val song = createSong()
     val confirmed = (deletion.inspect(song) as LocalAudioFileDeletion.Inspection.Ready).target
     val file = File(confirmed.legacyPath!!)
@@ -206,7 +217,7 @@ class LocalAudioFileDeletionInstrumentedTest {
     val song = createSong()
     val other = createSong()
     val target = (deletion.inspect(song) as LocalAudioFileDeletion.Inspection.Ready).target
-    val legacyPath = if (Build.VERSION.SDK_INT <= 28) {
+    val legacyPath = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
       @Suppress("DEPRECATION")
       context.contentResolver.query(Uri.parse(song.id), arrayOf(MediaStore.Audio.Media.DATA), null, null, null)?.use {
         if (it.moveToFirst()) it.getString(0) else null

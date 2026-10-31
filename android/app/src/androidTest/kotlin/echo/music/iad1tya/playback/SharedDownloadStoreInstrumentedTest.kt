@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -71,7 +72,7 @@ class SharedDownloadStoreInstrumentedTest {
 
   @Before fun setup() {
     context = instrumentation.targetContext
-    if (Build.VERSION.SDK_INT <= 28) {
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
       instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.WRITE_EXTERNAL_STORAGE)
     }
     val internal = Room.inMemoryDatabaseBuilder(context, InternalDatabase::class.java).build()
@@ -161,11 +162,23 @@ class SharedDownloadStoreInstrumentedTest {
   }
 
   private fun awaitRemoval(downloadUtil: DownloadUtil) = runBlocking {
-    withTimeout(15_000) {
+    val completed = withTimeoutOrNull(30_000) {
       while (downloadUtil.downloads.value.containsKey(id) || database.song(id).firstOrNull()?.song?.isDownloaded == true) {
         delay(100)
       }
-    }
+      true
+    } == true
+    assertTrue("Download state did not clear: manager=${downloadUtil.downloads.value[id]?.state}, " +
+      "database=${database.song(id).firstOrNull()?.song?.isDownloaded}", completed)
+  }
+
+  private suspend fun awaitSharedRemoval(downloadUtil: DownloadUtil) {
+    val completed = withTimeoutOrNull(30_000) {
+      while (store.hasRecord(id)) delay(100)
+      true
+    } == true
+    assertTrue("Shared record did not clear: state=${store.state(id)}, " +
+      "problem=${downloadUtil.sharedDownloadProblem.value}", completed)
   }
 
   @Test fun publishesExactBytesAndDeletesOwnedFile() = runBlocking {
@@ -191,7 +204,7 @@ class SharedDownloadStoreInstrumentedTest {
     removeOutsideApp(store.recordedUri(id)!!)
     downloadUtil.refreshSharedDownloads()
     awaitRemoval(downloadUtil)
-    withTimeout(15_000) { while (store.hasRecord(id)) delay(100) }
+    awaitSharedRemoval(downloadUtil)
     assertFalse(store.hasRecord(id))
   }
 
@@ -202,7 +215,7 @@ class SharedDownloadStoreInstrumentedTest {
     val downloadUtil = createUtil(download)
     instrumentation.runOnMainSync { downloadUtil.downloadManager.removeDownload(id) }
     awaitRemoval(downloadUtil)
-    withTimeout(15_000) { while (store.hasRecord(id)) delay(100) }
+    awaitSharedRemoval(downloadUtil)
     if (uri.scheme == "file") assertFalse(File(uri.path!!).exists())
     else assertEquals(0, context.contentResolver.query(uri, arrayOf("_id"), null, null, null)?.use { it.count } ?: 0)
   }

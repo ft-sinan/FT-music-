@@ -62,6 +62,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 
@@ -93,7 +95,22 @@ constructor(
   val sharedDownloadProblem = MutableStateFlow<String?>(null)
   val sharedDownloadBytes = MutableStateFlow(0L)
   private val publishJobs = ConcurrentHashMap<String, Job>()
+  private val downloadedFlagLock = Mutex()
   @Volatile private var permissionPromptDismissed = false
+
+  /** Persist the current manager state, not a stale callback or startup snapshot. */
+  private suspend fun syncDownloadedFlag(id: String) {
+    downloadedFlagLock.withLock {
+      val current = downloads.value[id]
+      val isComplete = current?.state == Download.STATE_COMPLETED &&
+        (!sharedDownloadStore.hasRecord(id) || sharedDownloadStore.state(id) != SharedDownloadStore.FileState.MISSING)
+      val date = if (isComplete) {
+        val timestamp = current!!.updateTimeMs.takeIf { it > 0 } ?: System.currentTimeMillis()
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
+      } else null
+      database.updateDownloadedInfo(id, isComplete, date)
+    }
+  }
 
   fun requestLegacyWritePermission() {
     permissionPromptDismissed = false
@@ -149,7 +166,7 @@ constructor(
           kotlinx.coroutines.withContext(Dispatchers.Main) { downloadManager.removeDownload(id) }
         } else {
           sharedDownloadStore.delete(id)
-          database.updateDownloadedInfo(id, false, null)
+          syncDownloadedFlag(id)
         }
       }
       downloads.value.values
@@ -374,18 +391,13 @@ constructor(
 
               scope.launch {
                 when (download.state) {
-                  Download.STATE_COMPLETED -> {
-                    if (downloads.value[download.request.id]?.state == Download.STATE_COMPLETED) {
-                      val timestamp = if (download.updateTimeMs > 0) download.updateTimeMs else System.currentTimeMillis()
-                      val downloadDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
-                      database.updateDownloadedInfo(download.request.id, true, downloadDate)
-                      scheduleSharedCopy(download)
-                    }
-                  }
+                  Download.STATE_COMPLETED,
                   Download.STATE_FAILED,
                   Download.STATE_STOPPED,
                   Download.STATE_REMOVING -> {
-                    database.updateDownloadedInfo(download.request.id, false, null)
+                    val id = download.request.id
+                    syncDownloadedFlag(id)
+                    downloads.value[id]?.takeIf { it.state == Download.STATE_COMPLETED }?.let(::scheduleSharedCopy)
                   }
                   else -> {}
                 }
@@ -398,7 +410,7 @@ constructor(
               downloads.update { it - id }
               sharedDownloadStore.markRemovalPending(id)
               scope.launch {
-                database.updateDownloadedInfo(id, false, null)
+                syncDownloadedFlag(id)
                 if (!sharedDownloadStore.delete(id)) {
                   sharedDownloadProblem.value = "A download could not be removed from Files. Check storage access and retry."
                   if (sharedDownloadStore.requiresLegacyPermission() && !permissionPromptDismissed) legacyWritePermissionNeeded.value = true
@@ -421,16 +433,7 @@ constructor(
     refreshSharedDownloads()
 
     scope.launch(Dispatchers.IO) {
-      result.values.forEach { download ->
-        if (download.state == Download.STATE_COMPLETED &&
-          downloads.value[download.request.id]?.state == Download.STATE_COMPLETED &&
-          (!sharedDownloadStore.hasRecord(download.request.id) ||
-            sharedDownloadStore.state(download.request.id) != SharedDownloadStore.FileState.MISSING)) {
-          val timestamp = if (download.updateTimeMs > 0) download.updateTimeMs else System.currentTimeMillis()
-          val downloadDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
-          database.updateDownloadedInfo(download.request.id, true, downloadDate)
-        }
-      }
+      result.keys.forEach { id -> syncDownloadedFlag(id) }
     }
 
     // Wi-Fi-only downloads: DownloadManager pauses queued downloads whenever the

@@ -69,7 +69,7 @@ class SharedDownloadStore @Inject constructor(
   fun markRemovalPending(id: String) { pendingRemovals.edit().putBoolean(id, true).commit() }
   fun pendingRemovalIds(): Set<String> = pendingRemovals.all.keys.toSet()
 
-  fun requiresLegacyPermission(): Boolean = Build.VERSION.SDK_INT <= 28 &&
+  fun requiresLegacyPermission(): Boolean = Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
     ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
 
   fun ids(): Set<String> = preferences.all.keys.toSet()
