@@ -108,7 +108,9 @@ def approve_android_if_needed():
         for node in tree.iter("node"):
             if node.get("package") == PACKAGE or node.get("enabled") == "false":
                 continue
-            if node.get("text") not in ("Allow", "Delete", "Move to trash", "While using the app"):
+            if node.get("text", "").strip().casefold() not in (
+                "allow", "allow access", "delete", "move to trash", "while using the app", "only this time"
+            ):
                 continue
             bounds = [int(n) for n in re.findall(r"\d+", node.get("bounds", ""))]
             if len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]:
