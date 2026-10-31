@@ -19,14 +19,20 @@ import echo.music.iad1tya.extensions.getCurrentQueueIndex
 import echo.music.iad1tya.extensions.getQueueWindows
 import echo.music.iad1tya.extensions.metadata
 import echo.music.iad1tya.extensions.togglePlayPause
+import echo.music.iad1tya.localmedia.LocalMatchFinder
+import echo.music.iad1tya.localmedia.MatchTrack
+import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.models.SponsorBlockSegment
 import echo.music.iad1tya.playback.MusicService.MusicBinder
 import echo.music.iad1tya.playback.queues.Queue
+import echo.music.iad1tya.playback.queues.ListQueue
+import echo.music.iad1tya.utils.isLocalMediaId
 import echo.music.iad1tya.utils.PlaybackLogLevel
 import echo.music.iad1tya.utils.PlaybackLogManager
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.reportException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,10 +40,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
+
+sealed interface LocalPlaybackPrompt {
+  data class Permission(val songTitle: String, val permission: String) : LocalPlaybackPrompt
+  data class Choices(val songTitle: String, val candidates: List<MatchTrack>) : LocalPlaybackPrompt
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerConnection(
@@ -232,16 +245,118 @@ class PlayerConnection(
     startSponsorBlockPolling()
   }
 
+  private val localMatchFinder = LocalMatchFinder(context)
+  private val matchPreferences = context.getSharedPreferences("ft_local_matching", Context.MODE_PRIVATE)
+  val localPlaybackPrompt = MutableStateFlow<LocalPlaybackPrompt?>(null)
+  private data class PendingMatch(val queue: Queue, val metadata: MediaMetadata)
+  private var pendingMatch: PendingMatch? = null
+  private var matchJob: Job? = null
+
   fun playQueue(queue: Queue) {
-    if (!playerReadinessFlow.value) {
-      Timber.tag(TAG).w("playQueue called before player ready; delegating to service")
+    matchJob?.cancel()
+    pendingMatch = null
+    localPlaybackPrompt.value = null
+    val selected = queue.preloadItem ?: (queue as? ListQueue)?.let {
+      it.items.getOrNull(it.startIndex)?.metadata
     }
-    try {
-      service.playQueue(queue)
-    } catch (e: Exception) {
-      Timber.tag(TAG).e(e, "Error in playQueue")
-      throw e
+    // Do not alter explicit device playback, remote casts or queues without song metadata.
+    if (selected == null || selected.id.isLocalMediaId() || selected.title.isBlank() ||
+      service.castConnectionHandler?.isCasting?.value == true) {
+      startQueue(queue)
+      return
     }
+    val request = PendingMatch(queue, selected)
+    matchJob = scope.launch {
+      try {
+        val alreadyDownloaded = withContext(Dispatchers.IO) {
+          service.sharedDownloadStore.state(selected.id) == SharedDownloadStore.FileState.PRESENT ||
+            (database.song(selected.id).firstOrNull()?.song?.isDownloaded == true &&
+              service.downloadCache.getCachedSpans(selected.id).isNotEmpty())
+        }
+        if (alreadyDownloaded) {
+          service.selectLocalFile(selected.id, null)
+          startQueue(queue)
+        } else if (!localMatchFinder.hasPermission()) {
+          if (matchPreferences.getBoolean("permission_declined", false)) {
+            service.selectLocalFile(selected.id, null)
+            startQueue(queue)
+          } else {
+            pendingMatch = request
+            localPlaybackPrompt.value = LocalPlaybackPrompt.Permission(selected.title, localMatchFinder.permission)
+          }
+        } else {
+          findLocalMatch(request)
+        }
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Timber.w(e, "Unable to check device songs; playing the requested online item")
+        service.selectLocalFile(selected.id, null)
+        startQueue(queue)
+      }
+    }
+  }
+
+  private suspend fun findLocalMatch(request: PendingMatch) {
+    val result = localMatchFinder.find(request.metadata)
+    val confident = result.confident
+    when {
+      confident != null -> {
+        service.selectLocalFile(request.metadata.id, android.net.Uri.parse(confident.id))
+        startQueue(request.queue)
+      }
+      result.candidates.isNotEmpty() -> {
+        pendingMatch = request
+        localPlaybackPrompt.value = LocalPlaybackPrompt.Choices(request.metadata.title, result.candidates)
+      }
+      else -> {
+        service.selectLocalFile(request.metadata.id, null)
+        startQueue(request.queue)
+      }
+    }
+  }
+
+  fun onLocalMatchPermissionResult(granted: Boolean) {
+    val request = pendingMatch ?: return
+    pendingMatch = null
+    localPlaybackPrompt.value = null
+    matchPreferences.edit().putBoolean("permission_declined", !granted).apply()
+    if (granted) {
+      matchJob = scope.launch {
+        try { findLocalMatch(request) }
+        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+          Timber.w(e, "Unable to match a device song")
+          service.selectLocalFile(request.metadata.id, null)
+          startQueue(request.queue)
+        }
+      }
+    } else {
+      service.selectLocalFile(request.metadata.id, null)
+      startQueue(request.queue)
+    }
+  }
+
+  /** A null choice explicitly streams; dismissing the dialog cancels instead. */
+  fun chooseLocalMatch(uri: String?) {
+    val request = pendingMatch ?: return
+    val prompt = localPlaybackPrompt.value as? LocalPlaybackPrompt.Choices ?: return
+    if (uri != null && prompt.candidates.none { it.id == uri }) return
+    pendingMatch = null
+    localPlaybackPrompt.value = null
+    service.selectLocalFile(request.metadata.id, uri?.let(android.net.Uri::parse))
+    startQueue(request.queue)
+  }
+
+  fun cancelLocalMatch() {
+    matchJob?.cancel()
+    pendingMatch = null
+    localPlaybackPrompt.value = null
+  }
+
+  private fun startQueue(queue: Queue) {
+    if (!playerReadinessFlow.value) Timber.tag(TAG).w("playQueue called before player ready; delegating to service")
+    service.playQueue(queue)
   }
 
   fun startRadioSeamlessly() {
@@ -608,6 +723,7 @@ class PlayerConnection(
 
   fun dispose() {
     try {
+      cancelLocalMatch()
       sponsorBlockJob?.cancel()
       attachedPlayer?.removeListener(this)
       attachedPlayer = null

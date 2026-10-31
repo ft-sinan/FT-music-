@@ -24,6 +24,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,7 @@ import coil3.annotation.DelicateCoilApi
 import coil3.annotation.ExperimentalCoilApi
 import coil3.imageLoader
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
@@ -79,6 +81,9 @@ fun StorageSettings(
 
   val context = LocalContext.current
   val database = LocalDatabase.current
+  val downloadUtil = LocalDownloadUtil.current
+  val sharedProblem by downloadUtil.sharedDownloadProblem.collectAsState()
+  val sharedDownloadBytes by downloadUtil.sharedDownloadBytes.collectAsState()
   val imageDiskCache = context.imageLoader.diskCache ?: return
   val playerCache = LocalPlayerConnection.current?.service?.playerCache ?: return
   val downloadCache = LocalPlayerConnection.current?.service?.downloadCache ?: return
@@ -319,7 +324,19 @@ fun StorageSettings(
             isHighlighted = (highlightKey == stringResource(R.string.downloaded_songs)),
             icon = painterResource(R.drawable.storage),
             title = { Text(stringResource(R.string.downloaded_songs)) },
-            description = { Text(text = formatFileSize(downloadCacheSize)) }
+            description = { Text(text = formatFileSize(downloadCacheSize + sharedDownloadBytes)) }
+          ),
+          Material3SettingsItem(
+            icon = painterResource(R.drawable.folder_managed),
+            title = { Text("FT Music download folder") },
+            description = { Text(sharedProblem ?: "Downloads/FT Music · Tap to refresh shared downloads") },
+            onClick = {
+              if (downloadUtil.sharedDownloadStore.requiresLegacyPermission()) downloadUtil.requestLegacyWritePermission()
+              else {
+                downloadUtil.sharedDownloadProblem.value = null
+                downloadUtil.refreshSharedDownloads()
+              }
+            }
           ),
           Material3SettingsItem(
             isHighlighted = (highlightKey == stringResource(R.string.clear_all_downloads)),

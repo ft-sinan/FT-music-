@@ -47,6 +47,8 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,11 +69,12 @@ import okhttp3.OkHttpClient
 class DownloadUtil
 @Inject
 constructor(
-  @ApplicationContext context: Context,
+  @ApplicationContext private val context: Context,
   val database: MusicDatabase,
   val databaseProvider: DatabaseProvider,
   @DownloadCache val downloadCache: SimpleCache,
   @PlayerCache val playerCache: SimpleCache,
+  val sharedDownloadStore: SharedDownloadStore,
 ) {
   private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
   private val downloadQuality by
@@ -86,6 +89,75 @@ constructor(
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   val downloads = MutableStateFlow<Map<String, Download>>(emptyMap())
+  val legacyWritePermissionNeeded = MutableStateFlow(false)
+  val sharedDownloadProblem = MutableStateFlow<String?>(null)
+  val sharedDownloadBytes = MutableStateFlow(0L)
+  private val publishJobs = ConcurrentHashMap<String, Job>()
+  @Volatile private var permissionPromptDismissed = false
+
+  fun requestLegacyWritePermission() {
+    permissionPromptDismissed = false
+    if (sharedDownloadStore.requiresLegacyPermission()) legacyWritePermissionNeeded.value = true
+  }
+
+  fun onLegacyWritePermissionResult(granted: Boolean) {
+    legacyWritePermissionNeeded.value = false
+    permissionPromptDismissed = !granted
+    if (granted) refreshSharedDownloads()
+    else sharedDownloadProblem.value = "Storage access is needed to save downloads in Files. Existing private downloads were kept."
+  }
+
+  private fun scheduleSharedCopy(download: Download) {
+    val id = download.request.id
+    if (downloads.value[id]?.state != Download.STATE_COMPLETED) return
+    val job = scope.launch(start = CoroutineStart.LAZY) {
+      try {
+        if (downloads.value[id]?.state != Download.STATE_COMPLETED) return@launch
+        when (sharedDownloadStore.publish(download)) {
+          SharedDownloadStore.PublishResult.NEEDS_PERMISSION -> {
+            if (!permissionPromptDismissed) legacyWritePermissionNeeded.value = true
+          }
+          SharedDownloadStore.PublishResult.UNAVAILABLE -> {
+            sharedDownloadProblem.value = "Some downloads are still private. Check free storage and try again in Storage settings."
+          }
+          SharedDownloadStore.PublishResult.PUBLISHED -> sharedDownloadBytes.value = sharedDownloadStore.totalSizeBytes()
+          SharedDownloadStore.PublishResult.ALREADY_PRESENT -> Unit
+        }
+      } finally {
+        publishJobs.remove(id, coroutineContext[Job])
+      }
+    }
+    if (publishJobs.putIfAbsent(id, job) == null) job.start() else job.cancel()
+  }
+
+  /** Reconcile on app resume and when the Downloaded playlist is opened/refreshed. */
+  fun refreshSharedDownloads() {
+    scope.launch {
+      sharedDownloadStore.pendingRemovalIds().forEach { id ->
+        if (!sharedDownloadStore.delete(id)) {
+          sharedDownloadProblem.value = "A download could not be removed from Files. Check storage access and retry."
+          if (sharedDownloadStore.requiresLegacyPermission() && !permissionPromptDismissed) legacyWritePermissionNeeded.value = true
+        }
+      }
+      val missing = sharedDownloadStore.ids().filter {
+        sharedDownloadStore.state(it) == SharedDownloadStore.FileState.MISSING
+      }.toSet()
+      missing.forEach { id ->
+        publishJobs.remove(id)?.cancel()
+        sharedDownloadStore.markRemovalPending(id)
+        if (downloads.value.containsKey(id)) {
+          kotlinx.coroutines.withContext(Dispatchers.Main) { downloadManager.removeDownload(id) }
+        } else {
+          sharedDownloadStore.delete(id)
+          database.updateDownloadedInfo(id, false, null)
+        }
+      }
+      downloads.value.values
+        .filter { it.state == Download.STATE_COMPLETED && it.request.id !in missing && !sharedDownloadStore.hasRecord(it.request.id) }
+        .forEach(::scheduleSharedCopy)
+      sharedDownloadBytes.value = sharedDownloadStore.totalSizeBytes()
+    }
+  }
 
   private val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
     ResolvingDataSource.Factory(
@@ -291,13 +363,23 @@ constructor(
               downloads.update { map ->
                 map.toMutableMap().apply { set(download.request.id, download) }
               }
+              if (download.state == Download.STATE_REMOVING) {
+                publishJobs.remove(download.request.id)?.cancel()
+              }
+              if ((download.state == Download.STATE_QUEUED || download.state == Download.STATE_DOWNLOADING) &&
+                sharedDownloadStore.requiresLegacyPermission() && !permissionPromptDismissed) {
+                legacyWritePermissionNeeded.value = true
+              }
 
               scope.launch {
                 when (download.state) {
                   Download.STATE_COMPLETED -> {
-                    val timestamp = if (download.updateTimeMs > 0) download.updateTimeMs else System.currentTimeMillis()
-                    val downloadDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
-                    database.updateDownloadedInfo(download.request.id, true, downloadDate)
+                    if (downloads.value[download.request.id]?.state == Download.STATE_COMPLETED) {
+                      val timestamp = if (download.updateTimeMs > 0) download.updateTimeMs else System.currentTimeMillis()
+                      val downloadDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
+                      database.updateDownloadedInfo(download.request.id, true, downloadDate)
+                      scheduleSharedCopy(download)
+                    }
                   }
                   Download.STATE_FAILED,
                   Download.STATE_STOPPED,
@@ -306,6 +388,21 @@ constructor(
                   }
                   else -> {}
                 }
+              }
+            }
+
+            override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
+              val id = download.request.id
+              publishJobs.remove(id)?.cancel()
+              downloads.update { it - id }
+              sharedDownloadStore.markRemovalPending(id)
+              scope.launch {
+                database.updateDownloadedInfo(id, false, null)
+                if (!sharedDownloadStore.delete(id)) {
+                  sharedDownloadProblem.value = "A download could not be removed from Files. Check storage access and retry."
+                  if (sharedDownloadStore.requiresLegacyPermission() && !permissionPromptDismissed) legacyWritePermissionNeeded.value = true
+                }
+                sharedDownloadBytes.value = sharedDownloadStore.totalSizeBytes()
               }
             }
           }
@@ -320,10 +417,14 @@ constructor(
       }
     }
     downloads.value = result
+    refreshSharedDownloads()
 
     scope.launch(Dispatchers.IO) {
       result.values.forEach { download ->
-        if (download.state == Download.STATE_COMPLETED) {
+        if (download.state == Download.STATE_COMPLETED &&
+          downloads.value[download.request.id]?.state == Download.STATE_COMPLETED &&
+          (!sharedDownloadStore.hasRecord(download.request.id) ||
+            sharedDownloadStore.state(download.request.id) != SharedDownloadStore.FileState.MISSING)) {
           val timestamp = if (download.updateTimeMs > 0) download.updateTimeMs else System.currentTimeMillis()
           val downloadDate = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
           database.updateDownloadedInfo(download.request.id, true, downloadDate)

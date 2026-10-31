@@ -344,6 +344,11 @@ class MainActivity : ComponentActivity() {
     bindService(Intent(this, MusicService::class.java), serviceConnection, BIND_AUTO_CREATE)
   }
 
+  override fun onResume() {
+    super.onResume()
+    downloadUtil.refreshSharedDownloads()
+  }
+
   override fun onStop() {
     unbindService(serviceConnection)
     super.onStop()
@@ -1246,6 +1251,7 @@ class MainActivity : ComponentActivity() {
           LocalListenTogetherManager provides listenTogetherManager,
           LocalExpandPlayer provides expandPlayer,
         ) {
+          PlaybackAndStoragePrompts(playerConnection, downloadUtil)
           Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
