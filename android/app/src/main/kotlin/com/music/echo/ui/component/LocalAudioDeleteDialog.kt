@@ -8,6 +8,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -20,8 +24,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalDownloadUtil
@@ -172,16 +178,18 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
       Text(stringResource(if (initial == LocalAudioFileDeletion.Inspection.Missing) R.string.ft_delete_device_missing_title else R.string.ft_delete_device_title))
     },
     text = {
-      when {
-        error != null -> Text(stringResource(error!!))
-        initial == null -> CircularProgressIndicator()
-        initial is LocalAudioFileDeletion.Inspection.Ready -> {
-          val target = (initial as LocalAudioFileDeletion.Inspection.Ready).target
-          Text(stringResource(R.string.ft_delete_device_confirmation, song.song.title, target.legacyPath ?: target.displayName))
+      Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+        when {
+          error != null -> Text(stringResource(error!!))
+          initial == null -> CircularProgressIndicator()
+          initial is LocalAudioFileDeletion.Inspection.Ready -> {
+            val target = (initial as LocalAudioFileDeletion.Inspection.Ready).target
+            Text(stringResource(R.string.ft_delete_device_confirmation, song.song.title, target.legacyPath ?: target.displayName))
+          }
+          initial == LocalAudioFileDeletion.Inspection.Missing -> Text(stringResource(R.string.ft_delete_device_missing_body))
+          initial == LocalAudioFileDeletion.Inspection.Changed -> Text(stringResource(R.string.ft_delete_device_changed))
+          else -> Text(stringResource(R.string.ft_delete_device_unavailable))
         }
-        initial == LocalAudioFileDeletion.Inspection.Missing -> Text(stringResource(R.string.ft_delete_device_missing_body))
-        initial == LocalAudioFileDeletion.Inspection.Changed -> Text(stringResource(R.string.ft_delete_device_changed))
-        else -> Text(stringResource(R.string.ft_delete_device_unavailable))
       }
     },
     confirmButton = {
