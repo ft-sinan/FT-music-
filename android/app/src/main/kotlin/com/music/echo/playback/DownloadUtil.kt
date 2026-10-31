@@ -155,6 +155,7 @@ constructor(
       downloads.value.values
         .filter { it.state == Download.STATE_COMPLETED && it.request.id !in missing && !sharedDownloadStore.hasRecord(it.request.id) }
         .forEach(::scheduleSharedCopy)
+      sharedDownloadStore.ids().filterNot { it in missing }.forEach { sharedDownloadStore.cleanupRedundantCache(it) }
       sharedDownloadBytes.value = sharedDownloadStore.totalSizeBytes()
     }
   }

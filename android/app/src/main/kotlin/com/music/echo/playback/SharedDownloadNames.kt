@@ -16,12 +16,21 @@ object SharedDownloadNames {
   }
 
   fun fileName(id: String, title: String, artist: String, extension: String): String {
-    val label = listOf(artist, title).filter { it.isNotBlank() }.joinToString(" - ")
+    val rawLabel = listOf(artist, title).filter { it.isNotBlank() }.joinToString(" - ")
       .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
       .replace(Regex("\\s+"), " ")
       .trim(' ', '.')
-      .take(100)
-      .ifBlank { "Song" }
+    // Keep even a title made entirely of four-byte characters under filesystem limits.
+    val bounded = StringBuilder()
+    var offset = 0
+    while (offset < rawLabel.length) {
+      val codePoint = rawLabel.codePointAt(offset)
+      val part = String(Character.toChars(codePoint))
+      if ((bounded.toString() + part).toByteArray(Charsets.UTF_8).size > 180) break
+      bounded.append(part)
+      offset += Character.charCount(codePoint)
+    }
+    val label = bounded.toString().trim(' ', '.').ifBlank { "Song" }
     val digest = MessageDigest.getInstance("SHA-256").digest(id.toByteArray(Charsets.UTF_8))
       .take(6).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     return "$label [$digest].$extension"

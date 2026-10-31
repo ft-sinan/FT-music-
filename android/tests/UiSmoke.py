@@ -14,7 +14,7 @@ import traceback
 import xml.etree.ElementTree as ET
 
 APK = Path(os.environ.get("FT_TEST_APK", ""))
-PACKAGE = "com.ftmusic.app"
+PACKAGE = os.environ.get("FT_TEST_PACKAGE", "com.ftmusic.app")
 OUT = Path(os.environ.get("ANDROID_UI_OUTPUT") or tempfile.mkdtemp(prefix="ft-ui-"))
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -78,8 +78,10 @@ def main():
     try:
         adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity")
         welcome = wait_for("Continue")
-        if "FT Music" not in labels(welcome):
-            raise AssertionError(f"FT Music branding not visible: {labels(welcome)}")
+        if "Welcome to FT Music" not in labels(welcome):
+            raise AssertionError(f"FT Music welcome not visible: {labels(welcome)}")
+        if any("Support upstream" in value or "Patreon" in value for value in labels(welcome)):
+            raise AssertionError("Upstream donation prompt unexpectedly shown on welcome screen")
         capture("welcome")
         tap("Continue")
         wait_for("Account")

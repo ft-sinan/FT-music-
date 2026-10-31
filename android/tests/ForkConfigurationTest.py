@@ -67,6 +67,19 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("update") { UpdateSettings(navController, scrollBehavior) }', nav)
         self.assertNotIn('if (getAutoUpdateCheckSetting(context))', activity)
 
+    def test_device_specific_download_mappings_are_never_backed_up(self):
+        store = (MAIN / "kotlin/com/music/echo/playback/SharedDownloadStore.kt").read_text()
+        names = {"ft_shared_downloads", "ft_shared_pending_removals"}
+        for name in names:
+            self.assertIn(f'getSharedPreferences("{name}"', store)
+        expected = {f"{name}.xml" for name in names}
+        legacy = ET.parse(MAIN / "res/xml/backup_rules.xml").getroot()
+        self.assertTrue(expected <= {el.get("path") for el in legacy.findall("exclude") if el.get("domain") == "sharedpref"})
+        modern = ET.parse(MAIN / "res/xml/data_extraction_rules.xml").getroot()
+        for section in ("cloud-backup", "device-transfer"):
+            exclusions = {el.get("path") for el in modern.findall(f"{section}/exclude") if el.get("domain") == "sharedpref"}
+            self.assertTrue(expected <= exclusions, section)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

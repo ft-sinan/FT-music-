@@ -50,7 +50,7 @@ fun PlaybackAndStoragePrompts(connection: PlayerConnection?, downloads: Download
       title = { Text("Find songs on your device?") },
       text = { Text("Allow audio access so FT Music can find a local copy of ${active.songTitle} before streaming.") },
       confirmButton = { TextButton(onClick = { audioPermission.launch(active.permission) }) { Text("Allow access") } },
-      dismissButton = { TextButton(onClick = { connection?.onLocalMatchPermissionResult(false) }) { Text("Stream instead") } },
+      dismissButton = { TextButton(onClick = { connection?.onLocalMatchPermissionResult(false) }) { Text("Use online version") } },
     )
     is LocalPlaybackPrompt.Choices -> AlertDialog(
       onDismissRequest = { connection?.cancelLocalMatch() },
@@ -67,7 +67,7 @@ fun PlaybackAndStoragePrompts(connection: PlayerConnection?, downloads: Download
           }
         }
       },
-      confirmButton = { TextButton(onClick = { connection?.chooseLocalMatch(null) }) { Text("Stream instead") } },
+      confirmButton = { TextButton(onClick = { connection?.chooseLocalMatch(null) }) { Text("Use online version") } },
       dismissButton = { TextButton(onClick = { connection?.cancelLocalMatch() }) { Text("Cancel") } },
     )
     null -> if (writePermissionNeeded) {

@@ -12,5 +12,6 @@ class PlaybackQualityTest {
   @Test fun showsActualTrackDetails() {
     assertEquals("AAC · 128 kbps · 44.1 kHz", PlaybackQuality.describe("audio/mp4a-latm", null, 128000, 44100))
     assertEquals("FLAC · 48 kHz", PlaybackQuality.describe("audio/flac", null, -1, 48000))
+    assertEquals("PCM · 352.8 kbps · 22.05 kHz", PlaybackQuality.describe("audio/raw", null, 352800, 22050))
   }
 }

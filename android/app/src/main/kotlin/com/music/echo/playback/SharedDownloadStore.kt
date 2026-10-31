@@ -9,6 +9,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.datasource.cache.ContentMetadata
@@ -18,7 +21,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.di.DownloadCache
 import java.io.File
+import java.io.FileDescriptor
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,6 +42,7 @@ class SharedDownloadStore @Inject constructor(
   @ApplicationContext private val context: Context,
   @DownloadCache private val cache: SimpleCache,
   private val database: MusicDatabase,
+  private val activePlayback: ActivePlaybackTracker,
 ) {
   enum class FileState { PRESENT, MISSING, UNKNOWN }
   enum class PublishResult { PUBLISHED, ALREADY_PRESENT, NEEDS_PERMISSION, UNAVAILABLE }
@@ -56,6 +62,7 @@ class SharedDownloadStore @Inject constructor(
   fun recordedUri(id: String): Uri? = preferences.getString(id, null)?.let(Uri::parse)
 
   fun totalSizeBytes(): Long = ids().sumOf { id ->
+    if (state(id) != FileState.PRESENT) return@sumOf 0L
     val uri = recordedUri(id) ?: return@sumOf 0L
     try {
       if (uri.scheme == "file") uri.path?.let { File(it).length() } ?: 0L
@@ -78,16 +85,19 @@ class SharedDownloadStore @Inject constructor(
       if (!withinFolder) return FileState.UNKNOWN
       return if (!file.exists()) FileState.MISSING else if (file.canRead()) FileState.PRESENT else FileState.UNKNOWN
     }
+    if (Build.VERSION.SDK_INT < 29 || uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY ||
+      uri.lastPathSegment?.toLongOrNull() == null) return FileState.UNKNOWN
     return try {
       val columns = if (Build.VERSION.SDK_INT >= 29) {
-        arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.OWNER_PACKAGE_NAME)
+        arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH)
       } else arrayOf(MediaStore.MediaColumns._ID)
       context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
         if (!cursor.moveToFirst()) return FileState.MISSING
         if (Build.VERSION.SDK_INT >= 29) {
           val owner = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.OWNER_PACKAGE_NAME))
-          // A recycled MediaStore ID must never authorize deleting another app's file.
-          if (owner != context.packageName) return FileState.MISSING
+          val folder = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)).orEmpty().trimEnd('/')
+          // Never let a recycled ID, corrupt record or a moved file authorize deletion elsewhere.
+          if (owner != context.packageName || folder != "${Environment.DIRECTORY_DOWNLOADS}/FT Music") return FileState.UNKNOWN
         }
       } ?: return FileState.UNKNOWN
       context.contentResolver.openFileDescriptor(uri, "r")?.use { FileState.PRESENT } ?: FileState.UNKNOWN
@@ -135,10 +145,12 @@ class SharedDownloadStore @Inject constructor(
         check(preferences.edit().putString(id, publishedUri.toString()).commit())
         // Once registered, the shared file is the authoritative copy. A cache cleanup
         // failure is harmless and must never cause us to delete that registered file.
-        try {
-          cache.removeResource(id)
-        } catch (e: Exception) {
-          Timber.w(e, "Unable to remove redundant private download cache")
+        activePlayback.ifNotRetained(id) {
+          try {
+            cache.removeResource(id)
+          } catch (e: Exception) {
+            Timber.w(e, "Unable to remove redundant private download cache")
+          }
         }
         PublishResult.PUBLISHED
       } catch (e: kotlinx.coroutines.CancellationException) {
@@ -195,24 +207,52 @@ class SharedDownloadStore @Inject constructor(
   private suspend fun publishLegacy(name: String, mime: String, files: List<File>, size: Long): Uri {
     val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "FT Music")
     check(directory.isDirectory || directory.mkdirs())
-    val tmp = File.createTempFile(".ft-download-", ".part", directory)
     var destination: File? = null
+    var createdIdentity: Pair<Long, Long>? = null
     try {
-      tmp.outputStream().use { copyFiles(files, it, size) }
       val dot = name.lastIndexOf('.')
       val stem = if (dot >= 0) name.substring(0, dot) else name
       val suffix = if (dot >= 0) name.substring(dot) else ""
       var candidate = File(directory, name)
       var number = 1
-      while (candidate.exists()) candidate = File(directory, "$stem (${number++})$suffix")
-      check(tmp.renameTo(candidate))
+      var descriptor: FileDescriptor? = null
+      while (descriptor == null) {
+        try {
+          // O_EXCL creates the destination and opens it as one operation. Unlike
+          // exists()/rename(), it cannot replace an unrelated file at this path.
+          descriptor = Os.open(candidate.absolutePath, OsConstants.O_WRONLY or OsConstants.O_CREAT or OsConstants.O_EXCL, 0x1B6)
+        } catch (e: ErrnoException) {
+          if (e.errno != OsConstants.EEXIST) throw e
+          candidate = File(directory, "$stem (${number++})$suffix")
+        }
+      }
       destination = candidate
+      val opened = requireNotNull(descriptor)
+      FileOutputStream(opened).use { output ->
+        val stat = Os.fstat(opened)
+        createdIdentity = stat.st_dev to stat.st_ino
+        copyFiles(files, output, size)
+      }
       MediaScannerConnection.scanFile(context, arrayOf(candidate.absolutePath), arrayOf(mime), null)
       return Uri.fromFile(candidate)
     } catch (e: Exception) {
-      tmp.delete()
-      destination?.delete()
+      // Only remove the inode we created, not a file someone replaced it with.
+      destination?.let { file ->
+        val current = runCatching { Os.stat(file.absolutePath) }.getOrNull()
+        if (current != null && createdIdentity == (current.st_dev to current.st_ino)) file.delete()
+      }
       throw e
+    }
+  }
+
+  suspend fun cleanupRedundantCache(id: String) = withContext(Dispatchers.IO) {
+    lock.withLock {
+      if (state(id) == FileState.PRESENT) {
+        activePlayback.ifNotRetained(id) {
+          try { cache.removeResource(id) }
+          catch (e: Exception) { Timber.w(e, "Unable to clean private download cache") }
+        }
+      }
     }
   }
 

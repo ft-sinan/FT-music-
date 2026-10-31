@@ -478,6 +478,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
 
   @Inject @DownloadCache lateinit var downloadCache: SimpleCache
   @Inject lateinit var sharedDownloadStore: SharedDownloadStore
+  @Inject lateinit var activePlaybackTracker: ActivePlaybackTracker
+  @Inject @echo.music.iad1tya.di.ApplicationScope lateinit var applicationScope: CoroutineScope
 
   private val selectedLocalFiles = ConcurrentHashMap<String, android.net.Uri>()
   val playbackOrigins = MutableStateFlow<Map<String, PlaybackOrigin>>(emptyMap())
@@ -3606,6 +3608,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     return ResolvingDataSource.Factory(DefaultDataSource.Factory(this, createCacheDataSource())) {
       dataSpec ->
       val mediaId = dataSpec.key ?: error("No media id")
+      // Exo may open current, prebuffered and crossfading tracks concurrently.
+      // Keep any private cache they touched until all players have been released.
+      activePlaybackTracker.retain(mediaId)
       if (mediaId.isLocalMediaId()) {
         val localUri = android.net.Uri.parse(mediaId)
         try {
@@ -3621,13 +3626,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         return@Factory dataSpec
       }
 
-      // Prefer the app's shared download, then an explicitly matched device file.
+      // Honour a chosen device file first, then the app's exact shared download.
       // Keep the online media ID/tag so queues, likes and YouTube sync remain intact.
-      val sharedUri = sharedDownloadStore.recordedUri(mediaId)
-      if (sharedUri != null && sharedDownloadStore.state(mediaId) == SharedDownloadStore.FileState.PRESENT) {
-        setPlaybackOrigin(mediaId, PlaybackOrigin.FT_DOWNLOAD)
-        return@Factory dataSpec.withUri(sharedUri)
-      }
       val selectedFile = selectedLocalFiles[mediaId]
       if (selectedFile != null) {
         val readable = try {
@@ -3638,6 +3638,11 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           return@Factory dataSpec.withUri(selectedFile)
         }
         selectedLocalFiles.remove(mediaId, selectedFile)
+      }
+      val sharedUri = sharedDownloadStore.recordedUri(mediaId)
+      if (sharedUri != null && sharedDownloadStore.state(mediaId) == SharedDownloadStore.FileState.PRESENT) {
+        setPlaybackOrigin(mediaId, PlaybackOrigin.FT_DOWNLOAD)
+        return@Factory dataSpec.withUri(sharedUri)
       }
 
       setPlaybackOrigin(mediaId, PlaybackOrigin.STREAM)
@@ -3653,8 +3658,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           .takeIf { it != androidx.media3.common.C.LENGTH_UNSET.toLong() }
           ?: dbFormat?.contentLength
           ?: -1L
+      val verifiedPrivateDownload = cachedLength > 0 && downloadCache.isCached(mediaId, 0, cachedLength)
       val isFullyDownloaded =
-        (cachedLength > 0 && downloadCache.isCached(mediaId, 0, cachedLength)) ||
+        verifiedPrivateDownload ||
           (dbSong?.song?.isDownloaded == true && downloadCache.getCachedSpans(mediaId).isNotEmpty())
 
       val activeQualityInCache =
@@ -3678,7 +3684,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
 
       if (!shouldBypassCache) {
         if (isFullyDownloaded) {
-          setPlaybackOrigin(mediaId, PlaybackOrigin.FT_DOWNLOAD)
+          setPlaybackOrigin(mediaId, if (verifiedPrivateDownload) PlaybackOrigin.FT_DOWNLOAD else PlaybackOrigin.UNKNOWN)
           scope.launch(Dispatchers.IO) { recoverSong(mediaId, isOfflinePlayback = true) }
           return@Factory dataSpec
         }
@@ -4242,6 +4248,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     playerEqProcessors.remove(player)?.let { dspController.removeAudioProcessor(it) }
 
     player.release()
+    val playedIds = activePlaybackTracker.releaseAll()
+    applicationScope.launch(Dispatchers.IO) {
+      playedIds.forEach { sharedDownloadStore.cleanupRedundantCache(it) }
+    }
     discordUpdateJob?.cancel()
     scope.cancel()
     super.onDestroy()

@@ -13,6 +13,11 @@ class SharedDownloadNamesTest {
     assertNull(SharedDownloadNames.extension("application/octet-stream"))
   }
 
+  @Test fun longUnicodeTitlesFitCommonFileSystemLimits() {
+    val name = SharedDownloadNames.fileName("one", "🎵".repeat(150), "", "webm")
+    assertEquals(true, name.toByteArray(Charsets.UTF_8).size < 255)
+  }
+
   @Test fun fileNamesAreSafeAndDifferentForDifferentSongs() {
     val first = SharedDownloadNames.fileName("one", "Title / Another", "Artist", "m4a")
     val second = SharedDownloadNames.fileName("two", "Title / Another", "Artist", "m4a")

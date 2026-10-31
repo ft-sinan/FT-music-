@@ -337,7 +337,7 @@ class PlayerConnection(
     }
   }
 
-  /** A null choice explicitly streams; dismissing the dialog cancels instead. */
+  /** A null choice uses the original online item (or its download); dismissal cancels. */
   fun chooseLocalMatch(uri: String?) {
     val request = pendingMatch ?: return
     val prompt = localPlaybackPrompt.value as? LocalPlaybackPrompt.Choices ?: return
