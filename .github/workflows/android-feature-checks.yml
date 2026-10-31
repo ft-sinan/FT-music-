@@ -73,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 35]
+        api: [28, 29, 35]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -85,31 +85,17 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Exercise shared downloads on Android ${{ matrix.api }}
+      - name: Exercise offline downloads and local deletion on Android ${{ matrix.api }}
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          FT_TEST_API: ${{ matrix.api }}
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set -euo pipefail
-            mapfile -t APP < <(find "$RUNNER_TEMP/ft-apks" -name '*.apk' ! -iname '*androidtest*' -type f)
-            mapfile -t TEST < <(find "$RUNNER_TEMP/ft-apks" -iname '*androidtest*.apk' -type f)
-            [[ ${#APP[@]} == 1 && ${#TEST[@]} == 1 ]]
-            adb install -r "${APP[0]}"
-            adb install -r "${TEST[0]}"
-            # Prove that device/shared playback does not depend on a stream URL.
-            adb shell svc wifi disable
-            adb shell svc data disable
-            adb shell am instrument -w -r com.ftmusic.app.debug.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrumentation.log"
-            grep -Eq 'OK \([0-9]+ tests?\)' "$RUNNER_TEMP/instrumentation.log"
-            adb shell svc wifi enable
-            adb shell svc data enable
-            if [[ '${{ matrix.api }}' == '35' ]]; then
-              FT_TEST_APK="${APP[0]}" FT_TEST_PACKAGE=com.ftmusic.app.debug ANDROID_UI_OUTPUT="$RUNNER_TEMP/ft-ui" python3 android/tests/UiSmoke.py 2>&1 | tee "$RUNNER_TEMP/ui-smoke.log"
-            fi
+          script: bash android/tests/run-feature-emulator.sh
       - name: Summarize an emulator failure
         if: failure()
         run: |
@@ -118,7 +104,7 @@ jobs:
           import os
           root = Path(os.environ['RUNNER_TEMP'])
           text = '\n'.join((root / name).read_text(errors='replace')[-5000:]
-                           for name in ('instrumentation.log', 'ui-smoke.log') if (root / name).exists())
+                           for name in ('instrumentation.log', 'local-delete-smoke.log', 'ui-smoke.log') if (root / name).exists())
           if text:
               print('::error title=Emulator feature check failed::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           PY
@@ -128,6 +114,8 @@ jobs:
           name: ft-feature-emulator-${{ matrix.api }}
           path: |
             ${{ runner.temp }}/instrumentation.log
+            ${{ runner.temp }}/local-delete-smoke.log
+            ${{ runner.temp }}/ft-local-delete-ui/
             ${{ runner.temp }}/ft-ui/
           if-no-files-found: ignore
           retention-days: 7

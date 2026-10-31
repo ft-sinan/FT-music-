@@ -1789,6 +1789,9 @@ interface DatabaseDao {
 
   @Query("DELETE FROM song WHERE id IN (:songIds)") fun deleteSongsByIds(songIds: List<String>)
 
+  @Query("DELETE FROM song WHERE id = :songId AND isLocal = 1")
+  fun deleteLocalSongById(songId: String): Int
+
   @Query("DELETE FROM song_artist_map WHERE songId = :songId")
   fun deleteSongArtistMaps(songId: String)
 

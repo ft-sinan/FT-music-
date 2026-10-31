@@ -83,6 +83,7 @@ import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.HeartBurstIcon
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.LocalAudioDeletion
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
 import echo.music.iad1tya.ui.component.Material3MenuItemData
@@ -116,6 +117,7 @@ fun SongMenu(
   val download by
     LocalDownloadUtil.current.getDownload(originalSong.id).collectAsState(initial = null)
   val coroutineScope = rememberCoroutineScope()
+  val localAudioDeletion = LocalAudioDeletion.current
   val syncUtils = LocalSyncUtils.current
   val listenTogetherManager = LocalListenTogetherManager.current
   val scope = rememberCoroutineScope()
@@ -488,6 +490,17 @@ fun SongMenu(
               },
               onClick = { showEditDialog = true }
             ),
+            if (song.song.isLocal) {
+              Material3MenuItemData(
+                title = { Text(stringResource(R.string.ft_delete_device_file)) },
+                description = { Text(stringResource(R.string.ft_delete_device_file_desc)) },
+                icon = { Icon(painterResource(R.drawable.delete), contentDescription = null) },
+                onClick = {
+                  localAudioDeletion.request(song)
+                  onDismiss()
+                },
+              )
+            } else null,
             if (!isGuest) {
               Material3MenuItemData(
                 title = { Text(text = stringResource(R.string.play_next)) },

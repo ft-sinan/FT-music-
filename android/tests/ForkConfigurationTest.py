@@ -67,6 +67,22 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("update") { UpdateSettings(navController, scrollBehavior) }', nav)
         self.assertNotIn('if (getAutoUpdateCheckSetting(context))', activity)
 
+    def test_local_file_deletion_requires_confirmation_and_targets_only_local_rows(self):
+        menu = (MAIN / "kotlin/com/music/echo/ui/menu/SongMenu.kt").read_text()
+        dialog = (MAIN / "kotlin/com/music/echo/ui/component/LocalAudioDeleteDialog.kt").read_text()
+        deletion = (MAIN / "kotlin/com/music/echo/localmedia/LocalAudioFileDeletion.kt").read_text()
+        dao = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/db/DatabaseDao.kt").read_text()
+        activity = (MAIN / "kotlin/com/music/echo/MainActivity.kt").read_text()
+        controller = (MAIN / "kotlin/com/music/echo/ui/component/LocalAudioDeletionViewModel.kt").read_text()
+        self.assertIn("if (song.song.isLocal)", menu)
+        self.assertIn("localAudioDeletion.request(song)", menu)
+        self.assertIn("LocalAudioDeleteDialog(", activity)
+        self.assertIn("SavedStateHandle", controller)
+        self.assertIn("MediaStore.createDeleteRequest", deletion)
+        self.assertIn("RecoverableSecurityException", deletion)
+        self.assertIn("deleteLocalSongById(song.id)", dialog)
+        self.assertIn("WHERE id = :songId AND isLocal = 1", dao)
+
     def test_search_suggestions_pass_song_metadata_to_local_matcher(self):
         suggestions = (MAIN / "kotlin/com/music/echo/ui/screens/search/suggestions/SuggestionsViewModel.kt").read_text()
         self.assertEqual(suggestions.count('YouTubeQueue(WatchEndpoint(videoId = bestMatch.id), bestMatch.toMediaMetadata())'), 2)
