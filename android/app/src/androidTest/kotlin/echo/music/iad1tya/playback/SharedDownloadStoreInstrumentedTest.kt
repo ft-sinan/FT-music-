@@ -290,6 +290,21 @@ class SharedDownloadStoreInstrumentedTest {
     } finally { removeOutsideApp(unrelated) }
   }
 
+  @Test fun legacyFileReplacedOutsideTheAppIsNeverDeleted() = runBlocking {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return@runBlocking
+    val download = seed()
+    assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
+    val uri = store.recordedUri(id)!!
+    val file = File(uri.path!!)
+    assertTrue(file.delete())
+    file.writeBytes(byteArrayOf(42))
+    try {
+      assertEquals(SharedDownloadStore.FileState.MISSING, store.state(id))
+      assertTrue(store.delete(id))
+      assertArrayEquals(byteArrayOf(42), file.readBytes())
+    } finally { file.delete() }
+  }
+
   @Test fun neverDeletesAnUnrelatedFileEvenIfItsUriIsRecorded() = runBlocking {
     val unrelated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val values = ContentValues().apply {

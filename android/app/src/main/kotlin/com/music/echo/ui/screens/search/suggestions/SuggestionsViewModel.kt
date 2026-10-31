@@ -9,6 +9,7 @@ import com.music.innertube.models.ArtistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.playback.PlayerConnection
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import javax.inject.Inject
@@ -136,7 +137,7 @@ class SuggestionsViewModel @Inject constructor() : ViewModel() {
 
         if (bestMatch != null) {
           withContext(Dispatchers.Main) {
-            playerConnection?.playQueue(YouTubeQueue(WatchEndpoint(videoId = bestMatch.id)))
+            playerConnection?.playQueue(YouTubeQueue(WatchEndpoint(videoId = bestMatch.id), bestMatch.toMediaMetadata()))
           }
         }
       }
@@ -187,7 +188,7 @@ class SuggestionsViewModel @Inject constructor() : ViewModel() {
 
         if (bestMatch != null) {
           withContext(Dispatchers.Main) {
-            playerConnection?.playQueue(YouTubeQueue(WatchEndpoint(videoId = bestMatch.id)))
+            playerConnection?.playQueue(YouTubeQueue(WatchEndpoint(videoId = bestMatch.id), bestMatch.toMediaMetadata()))
           }
         }
       }

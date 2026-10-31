@@ -25,6 +25,7 @@ import java.io.FileDescriptor
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.OutputStream
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,11 @@ class SharedDownloadStore @Inject constructor(
   enum class FileState { PRESENT, MISSING, UNKNOWN }
   enum class PublishResult { PUBLISHED, ALREADY_PRESENT, NEEDS_PERMISSION, UNAVAILABLE }
 
+  private data class LegacyFingerprint(val size: Long, val modified: Long, val sha256: String)
+  private data class Published(val uri: Uri, val fingerprint: LegacyFingerprint? = null) {
+    fun encode(): String = fingerprint?.let { "$uri\n${it.size}\n${it.modified}\n${it.sha256}" } ?: uri.toString()
+  }
+
   private val preferences = context.getSharedPreferences("ft_shared_downloads", Context.MODE_PRIVATE)
   private val pendingRemovals = context.getSharedPreferences("ft_shared_pending_removals", Context.MODE_PRIVATE)
   private val lock = Mutex()
@@ -59,7 +65,16 @@ class SharedDownloadStore @Inject constructor(
 
   fun ids(): Set<String> = preferences.all.keys.toSet()
   fun hasRecord(id: String): Boolean = preferences.contains(id)
-  fun recordedUri(id: String): Uri? = preferences.getString(id, null)?.let(Uri::parse)
+  fun recordedUri(id: String): Uri? = preferences.getString(id, null)?.substringBefore('\n')?.let(Uri::parse)
+
+  private fun legacyFingerprint(id: String): LegacyFingerprint? {
+    val parts = preferences.getString(id, null)?.split('\n') ?: return null
+    if (parts.size != 4) return null
+    val size = parts[1].toLongOrNull() ?: return null
+    val modified = parts[2].toLongOrNull() ?: return null
+    if (size <= 0 || modified <= 0 || !parts[3].matches(Regex("[0-9a-f]{64}"))) return null
+    return LegacyFingerprint(size, modified, parts[3])
+  }
 
   fun totalSizeBytes(): Long = ids().sumOf { id ->
     if (state(id) != FileState.PRESENT) return@sumOf 0L
@@ -83,7 +98,12 @@ class SharedDownloadStore @Inject constructor(
       val root = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "FT Music")
       val withinFolder = try { file.canonicalPath.startsWith(root.canonicalPath + File.separator) } catch (_: Exception) { false }
       if (!withinFolder) return FileState.UNKNOWN
-      return if (!file.exists()) FileState.MISSING else if (file.canRead()) FileState.PRESENT else FileState.UNKNOWN
+      if (!file.exists()) return FileState.MISSING
+      if (!file.canRead()) return FileState.UNKNOWN
+      val expected = legacyFingerprint(id) ?: return FileState.UNKNOWN
+      // If the original was replaced or edited, forget the association without deleting the new file.
+      if (file.length() != expected.size || file.lastModified() != expected.modified) return FileState.MISSING
+      return FileState.PRESENT
     }
     if (Build.VERSION.SDK_INT < 29 || uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY ||
       uri.lastPathSegment?.toLongOrNull() == null) return FileState.UNKNOWN
@@ -134,15 +154,15 @@ class SharedDownloadStore @Inject constructor(
       }
       if (position != knownLength) return@withLock PublishResult.UNAVAILABLE
 
-      var publishedUri: Uri? = null
+      var published: Published? = null
       try {
-        publishedUri = if (Build.VERSION.SDK_INT >= 29) {
-          publishMediaStore(name, format.mimeType, spans.map { it.file!! }, knownLength)
+        published = if (Build.VERSION.SDK_INT >= 29) {
+          Published(publishMediaStore(name, format.mimeType, spans.map { it.file!! }, knownLength))
         } else {
           publishLegacy(name, format.mimeType, spans.map { it.file!! }, knownLength)
         }
         // Persist the association before discarding a single private cache byte.
-        check(preferences.edit().putString(id, publishedUri.toString()).commit())
+        check(preferences.edit().putString(id, requireNotNull(published).encode()).commit())
         // Once registered, the shared file is the authoritative copy. A cache cleanup
         // failure is harmless and must never cause us to delete that registered file.
         activePlayback.ifNotRetained(id) {
@@ -154,18 +174,19 @@ class SharedDownloadStore @Inject constructor(
         }
         PublishResult.PUBLISHED
       } catch (e: kotlinx.coroutines.CancellationException) {
-        publishedUri?.let { deleteUri(it) }
+        published?.let { discardPublished(it) }
         throw e
       } catch (e: Exception) {
         Timber.w(e, "Unable to publish FT download; keeping its private cache")
-        publishedUri?.let { deleteUri(it) }
+        published?.let { discardPublished(it) }
         PublishResult.UNAVAILABLE
       }
     }
   }
 
-  private suspend fun copyFiles(files: List<File>, output: OutputStream, expected: Long) {
+  private suspend fun copyFiles(files: List<File>, output: OutputStream, expected: Long): String {
     var written = 0L
+    val digest = MessageDigest.getInstance("SHA-256")
     val buffer = ByteArray(64 * 1024)
     files.forEach { file ->
       file.inputStream().use { input ->
@@ -174,12 +195,14 @@ class SharedDownloadStore @Inject constructor(
           val count = input.read(buffer)
           if (count < 0) break
           output.write(buffer, 0, count)
+          digest.update(buffer, 0, count)
           written += count
         }
       }
     }
     output.flush()
     check(written == expected) { "Downloaded cache is incomplete" }
+    return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
   }
 
   private suspend fun publishMediaStore(name: String, mime: String, files: List<File>, size: Long): Uri {
@@ -198,17 +221,18 @@ class SharedDownloadStore @Inject constructor(
       check(context.contentResolver.update(uri, ready, null, null) == 1)
       return uri
     } catch (e: Exception) {
-      deleteUri(uri)
+      discardPublished(Published(uri))
       throw e
     }
   }
 
   @Suppress("DEPRECATION")
-  private suspend fun publishLegacy(name: String, mime: String, files: List<File>, size: Long): Uri {
+  private suspend fun publishLegacy(name: String, mime: String, files: List<File>, size: Long): Published {
     val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "FT Music")
     check(directory.isDirectory || directory.mkdirs())
     var destination: File? = null
     var createdIdentity: Pair<Long, Long>? = null
+    var completeFingerprint: LegacyFingerprint? = null
     try {
       val dot = name.lastIndexOf('.')
       val stem = if (dot >= 0) name.substring(0, dot) else name
@@ -228,18 +252,24 @@ class SharedDownloadStore @Inject constructor(
       }
       destination = candidate
       val opened = requireNotNull(descriptor)
-      FileOutputStream(opened).use { output ->
+      val sha256 = FileOutputStream(opened).use { output ->
         val stat = Os.fstat(opened)
         createdIdentity = stat.st_dev to stat.st_ino
         copyFiles(files, output, size)
       }
+      check(candidate.length() == size && candidate.lastModified() > 0)
+      val fingerprint = LegacyFingerprint(size, candidate.lastModified(), sha256)
+      completeFingerprint = fingerprint
+      val uri = Uri.fromFile(candidate)
+      check(matchesLegacyFile(uri, fingerprint))
       MediaScannerConnection.scanFile(context, arrayOf(candidate.absolutePath), arrayOf(mime), null)
-      return Uri.fromFile(candidate)
+      return Published(uri, fingerprint)
     } catch (e: Exception) {
       // Only remove the inode we created, not a file someone replaced it with.
       destination?.let { file ->
         val current = runCatching { Os.stat(file.absolutePath) }.getOrNull()
-        if (current != null && createdIdentity == (current.st_dev to current.st_ino)) file.delete()
+        val unmodified = completeFingerprint?.let { matchesLegacyFile(Uri.fromFile(file), it) } ?: true
+        if (current != null && createdIdentity == (current.st_dev to current.st_ino) && unmodified) file.delete()
       }
       throw e
     }
@@ -265,11 +295,53 @@ class SharedDownloadStore @Inject constructor(
       }
       val fileState = state(id)
       if (fileState == FileState.UNKNOWN) return@withLock false
-      if (fileState == FileState.PRESENT && !deleteUri(uri)) return@withLock false
+      if (fileState == FileState.PRESENT) {
+        if (uri.scheme == "file") {
+          val expected = legacyFingerprint(id) ?: return@withLock false
+          if (!matchesLegacyFile(uri, expected)) return@withLock false
+        }
+        if (!deleteUri(uri)) return@withLock false
+      }
       val removed = preferences.edit().remove(id).commit()
       if (removed) pendingRemovals.edit().remove(id).commit()
       removed
     }
+  }
+
+  private fun matchesLegacyFile(uri: Uri, expected: LegacyFingerprint): Boolean {
+    return try {
+      val file = uri.path?.let(::File) ?: return false
+      if (!file.isFile || file.length() != expected.size || file.lastModified() != expected.modified) return false
+      val before = Os.stat(file.absolutePath)
+      val digest = MessageDigest.getInstance("SHA-256")
+      file.inputStream().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+          val count = input.read(buffer)
+          if (count < 0) break
+          digest.update(buffer, 0, count)
+        }
+      }
+      val after = Os.stat(file.absolutePath)
+      val actual = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+      before.st_dev == after.st_dev && before.st_ino == after.st_ino &&
+        file.length() == expected.size && file.lastModified() == expected.modified && actual == expected.sha256
+    } catch (_: Exception) { false }
+  }
+
+  private fun discardPublished(published: Published) {
+    val uri = published.uri
+    val safe = if (uri.scheme == "file") {
+      published.fingerprint?.let { matchesLegacyFile(uri, it) } == true
+    } else if (Build.VERSION.SDK_INT >= 29 && uri.scheme == "content" && uri.authority == MediaStore.AUTHORITY) {
+      try {
+        context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use {
+          it.moveToFirst() && it.getString(0) == context.packageName &&
+            it.getString(1).orEmpty().trimEnd('/') == "${Environment.DIRECTORY_DOWNLOADS}/FT Music"
+        } ?: false
+      } catch (_: Exception) { false }
+    } else false
+    if (safe) deleteUri(uri)
   }
 
   private fun deleteUri(uri: Uri): Boolean {

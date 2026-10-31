@@ -67,6 +67,10 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("update") { UpdateSettings(navController, scrollBehavior) }', nav)
         self.assertNotIn('if (getAutoUpdateCheckSetting(context))', activity)
 
+    def test_search_suggestions_pass_song_metadata_to_local_matcher(self):
+        suggestions = (MAIN / "kotlin/com/music/echo/ui/screens/search/suggestions/SuggestionsViewModel.kt").read_text()
+        self.assertEqual(suggestions.count('YouTubeQueue(WatchEndpoint(videoId = bestMatch.id), bestMatch.toMediaMetadata())'), 2)
+
     def test_device_specific_download_mappings_are_never_backed_up(self):
         store = (MAIN / "kotlin/com/music/echo/playback/SharedDownloadStore.kt").read_text()
         names = {"ft_shared_downloads", "ft_shared_pending_removals"}
