@@ -80,7 +80,18 @@ def open_song_menu():
     if not bounds:
         raise AssertionError("Song has no visible bounds")
     width, height = screen_size()
-    shell("input", "tap", str(int(width * 0.92)), str((bounds[1] + bounds[3]) // 2))
+    title_y = (bounds[1] + bounds[3]) // 2
+    options = []
+    for node in tree.iter("node"):
+        if "More options" not in (node.get("text", ""), node.get("content-desc", "")):
+            continue
+        button = [int(n) for n in re.findall(r"\d+", node.get("bounds", ""))]
+        if len(button) == 4 and button[2] > button[0] and button[3] > button[1]:
+            options.append(button)
+    if not options:
+        raise AssertionError(f"Song options buttons not visible: {labels(tree)[:80]}")
+    button = min(options, key=lambda item: abs((item[1] + item[3]) // 2 - title_y))
+    shell("input", "tap", str((button[0] + button[2]) // 2), str((button[1] + button[3]) // 2))
     for _ in range(4):
         tree = dump()
         if node_bounds(tree, "Delete from device"):
@@ -130,8 +141,14 @@ def main():
         wait_for(OTHER_TITLE, timeout=90)
         open_song_menu()
         tap("Delete from device")
-        confirmation = wait_for("Delete this song?", timeout=30)
-        if not any("cannot be undone" in label for label in labels(confirmation)):
+        wait_for("Delete this song?", timeout=30)
+        end = time.monotonic() + 30
+        while time.monotonic() < end:
+            confirmation = dump()
+            if any("cannot be undone" in label for label in labels(confirmation)):
+                break
+            time.sleep(0.5)
+        else:
             raise AssertionError(f"The physical-deletion warning was not visible: {labels(confirmation)}")
         # The confirmation is owned by the activity, not the transient song menu.
         # Recreate the activity as a rotation would, then verify cancellation still works.
