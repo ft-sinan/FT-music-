@@ -305,6 +305,50 @@ class SharedDownloadStoreInstrumentedTest {
     } finally { file.delete() }
   }
 
+  @Test fun mediaStoreMappingCannotDeleteAnotherOwnedFileInTheSameFolder() = runBlocking {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@runBlocking
+    val download = seed()
+    assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
+    val original = store.recordedUri(id)!!
+    val records = context.getSharedPreferences("ft_shared_downloads", Context.MODE_PRIVATE)
+    val originalRecord = records.getString(id, null)!!
+    val values = ContentValues().apply {
+      put(MediaStore.MediaColumns.DISPLAY_NAME, "$id-personal.wav")
+      put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+      put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/FT Music/")
+    }
+    val unrelated = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)!!
+    context.contentResolver.openOutputStream(unrelated)!!.use { it.write(bytes) }
+    try {
+      val forgedRecord = unrelated.toString() + "\n" + originalRecord.substringAfter('\n')
+      records.edit().putString(id, forgedRecord).commit()
+      store.delete(id)
+      assertArrayEquals(bytes, read(unrelated))
+      assertArrayEquals(bytes, read(original))
+    } finally {
+      records.edit().putString(id, originalRecord).commit()
+      store.delete(id)
+      removeOutsideApp(unrelated)
+    }
+  }
+
+  @Test fun editedMediaStoreDownloadIsNeverDeletedAsTheOriginal() = runBlocking {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@runBlocking
+    val download = seed()
+    assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
+    val uri = store.recordedUri(id)!!
+    val edited = bytes.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 1).toByte() }
+    context.contentResolver.openOutputStream(uri, "w")!!.use { it.write(edited) }
+    try {
+      store.delete(id)
+      assertArrayEquals(edited, read(uri))
+    } finally {
+      context.getSharedPreferences("ft_shared_downloads", Context.MODE_PRIVATE).edit().remove(id).commit()
+      context.getSharedPreferences("ft_shared_pending_removals", Context.MODE_PRIVATE).edit().remove(id).commit()
+      removeOutsideApp(uri)
+    }
+  }
+
   @Test fun neverDeletesAnUnrelatedFileEvenIfItsUriIsRecorded() = runBlocking {
     val unrelated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val values = ContentValues().apply {

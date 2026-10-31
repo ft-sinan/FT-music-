@@ -49,8 +49,17 @@ class SharedDownloadStore @Inject constructor(
   enum class PublishResult { PUBLISHED, ALREADY_PRESENT, NEEDS_PERMISSION, UNAVAILABLE }
 
   private data class LegacyFingerprint(val size: Long, val modified: Long, val sha256: String)
-  private data class Published(val uri: Uri, val fingerprint: LegacyFingerprint? = null) {
-    fun encode(): String = fingerprint?.let { "$uri\n${it.size}\n${it.modified}\n${it.sha256}" } ?: uri.toString()
+  private data class MediaFingerprint(val size: Long, val modified: Long, val sha256: String, val name: String)
+  private data class Published(
+    val uri: Uri,
+    val fingerprint: LegacyFingerprint? = null,
+    val mediaFingerprint: MediaFingerprint? = null,
+  ) {
+    fun encode(): String = when {
+      fingerprint != null -> "$uri\n${fingerprint.size}\n${fingerprint.modified}\n${fingerprint.sha256}"
+      mediaFingerprint != null -> "$uri\n${mediaFingerprint.size}\n${mediaFingerprint.modified}\n${mediaFingerprint.sha256}\n${mediaFingerprint.name}"
+      else -> uri.toString()
+    }
   }
 
   private val preferences = context.getSharedPreferences("ft_shared_downloads", Context.MODE_PRIVATE)
@@ -74,6 +83,15 @@ class SharedDownloadStore @Inject constructor(
     val modified = parts[2].toLongOrNull() ?: return null
     if (size <= 0 || modified <= 0 || !parts[3].matches(Regex("[0-9a-f]{64}"))) return null
     return LegacyFingerprint(size, modified, parts[3])
+  }
+
+  private fun mediaFingerprint(id: String): MediaFingerprint? {
+    val parts = preferences.getString(id, null)?.split('\n') ?: return null
+    if (parts.size != 5) return null
+    val size = parts[1].toLongOrNull() ?: return null
+    val modified = parts[2].toLongOrNull() ?: return null
+    if (size <= 0 || modified < 0 || !parts[3].matches(Regex("[0-9a-f]{64}")) || parts[4].isBlank()) return null
+    return MediaFingerprint(size, modified, parts[3], parts[4])
   }
 
   fun totalSizeBytes(): Long = ids().sumOf { id ->
@@ -107,18 +125,23 @@ class SharedDownloadStore @Inject constructor(
     }
     if (Build.VERSION.SDK_INT < 29 || uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY ||
       uri.lastPathSegment?.toLongOrNull() == null) return FileState.UNKNOWN
+    val expected = mediaFingerprint(id) ?: return FileState.UNKNOWN
     return try {
-      val columns = if (Build.VERSION.SDK_INT >= 29) {
-        arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH)
-      } else arrayOf(MediaStore.MediaColumns._ID)
+      val columns = arrayOf(
+        MediaStore.MediaColumns._ID, MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH,
+        MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
+      )
       context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
         if (!cursor.moveToFirst()) return FileState.MISSING
-        if (Build.VERSION.SDK_INT >= 29) {
-          val owner = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.OWNER_PACKAGE_NAME))
-          val folder = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)).orEmpty().trimEnd('/')
-          // Never let a recycled ID, corrupt record or a moved file authorize deletion elsewhere.
-          if (owner != context.packageName || folder != "${Environment.DIRECTORY_DOWNLOADS}/FT Music") return FileState.UNKNOWN
-        }
+        val owner = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.OWNER_PACKAGE_NAME))
+        val folder = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)).orEmpty().trimEnd('/')
+        // Never let a recycled ID, corrupt record or a moved file authorize deletion elsewhere.
+        if (owner != context.packageName || folder != "${Environment.DIRECTORY_DOWNLOADS}/FT Music") return FileState.UNKNOWN
+        val name = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)).orEmpty()
+        val size = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE))
+        val modified = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED))
+        if (name != expected.name || size != expected.size ||
+          (expected.modified > 0 && modified > 0 && modified != expected.modified)) return FileState.MISSING
       } ?: return FileState.UNKNOWN
       context.contentResolver.openFileDescriptor(uri, "r")?.use { FileState.PRESENT } ?: FileState.UNKNOWN
     } catch (_: FileNotFoundException) {
@@ -157,7 +180,7 @@ class SharedDownloadStore @Inject constructor(
       var published: Published? = null
       try {
         published = if (Build.VERSION.SDK_INT >= 29) {
-          Published(publishMediaStore(name, format.mimeType, spans.map { it.file!! }, knownLength))
+          publishMediaStore(name, format.mimeType, spans.map { it.file!! }, knownLength)
         } else {
           publishLegacy(name, format.mimeType, spans.map { it.file!! }, knownLength)
         }
@@ -205,7 +228,7 @@ class SharedDownloadStore @Inject constructor(
     return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
   }
 
-  private suspend fun publishMediaStore(name: String, mime: String, files: List<File>, size: Long): Uri {
+  private suspend fun publishMediaStore(name: String, mime: String, files: List<File>, size: Long): Published {
     val values = ContentValues().apply {
       put(MediaStore.MediaColumns.DISPLAY_NAME, name)
       put(MediaStore.MediaColumns.MIME_TYPE, mime.substringBefore(';'))
@@ -214,14 +237,27 @@ class SharedDownloadStore @Inject constructor(
     }
     val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
       ?: error("Unable to create shared download")
+    var madePublic = false
     try {
       val output = context.contentResolver.openOutputStream(uri, "w") ?: error("Unable to write shared download")
-      output.use { copyFiles(files, it, size) }
+      val sha256 = output.use { copyFiles(files, it, size) }
       val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
       check(context.contentResolver.update(uri, ready, null, null) == 1)
-      return uri
+      madePublic = true
+      val fingerprint = context.contentResolver.query(uri, arrayOf(
+        MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
+      ), null, null, null)?.use { cursor ->
+        check(cursor.moveToFirst())
+        MediaFingerprint(cursor.getLong(1), cursor.getLong(2).coerceAtLeast(0), sha256, cursor.getString(0).orEmpty())
+      } ?: error("Unable to inspect shared download")
+      check(fingerprint.size == size && fingerprint.name.isNotBlank() && '\n' !in fingerprint.name)
+      // Verify the published bytes before ever discarding the original private cache.
+      check(matchesMediaFile(uri, fingerprint)) { "Shared download did not match the private copy" }
+      return Published(uri, mediaFingerprint = fingerprint)
     } catch (e: Exception) {
-      discardPublished(Published(uri))
+      // Pending rows are not visible to other apps. Once public, leave an unverifiable
+      // copy alone rather than risk removing a file the user may have already edited.
+      if (!madePublic) discardPublished(Published(uri))
       throw e
     }
   }
@@ -299,6 +335,9 @@ class SharedDownloadStore @Inject constructor(
         if (uri.scheme == "file") {
           val expected = legacyFingerprint(id) ?: return@withLock false
           if (!matchesLegacyFile(uri, expected)) return@withLock false
+        } else {
+          val expected = mediaFingerprint(id) ?: return@withLock false
+          if (!matchesMediaFile(uri, expected)) return@withLock false
         }
         if (!deleteUri(uri)) return@withLock false
       }
@@ -306,6 +345,36 @@ class SharedDownloadStore @Inject constructor(
       if (removed) pendingRemovals.edit().remove(id).commit()
       removed
     }
+  }
+
+  private fun matchesMediaFile(uri: Uri, expected: MediaFingerprint): Boolean {
+    if (Build.VERSION.SDK_INT < 29 || uri.scheme != "content" || uri.authority != MediaStore.AUTHORITY) return false
+    fun metadataMatches(): Boolean = context.contentResolver.query(uri, arrayOf(
+      MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH,
+      MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
+    ), null, null, null)?.use { cursor ->
+      if (!cursor.moveToFirst()) return@use false
+      val modified = cursor.getLong(4)
+      cursor.getString(0) == context.packageName &&
+        cursor.getString(1).orEmpty().trimEnd('/') == "${Environment.DIRECTORY_DOWNLOADS}/FT Music" &&
+        cursor.getString(2) == expected.name && cursor.getLong(3) == expected.size &&
+        (expected.modified <= 0 || modified <= 0 || modified == expected.modified)
+    } ?: false
+
+    return try {
+      if (!metadataMatches()) return false
+      val digest = MessageDigest.getInstance("SHA-256")
+      context.contentResolver.openInputStream(uri)?.use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+          val count = input.read(buffer)
+          if (count < 0) break
+          digest.update(buffer, 0, count)
+        }
+      } ?: return false
+      val actual = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+      actual == expected.sha256 && metadataMatches()
+    } catch (_: Exception) { false }
   }
 
   private fun matchesLegacyFile(uri: Uri, expected: LegacyFingerprint): Boolean {
@@ -334,7 +403,8 @@ class SharedDownloadStore @Inject constructor(
     val safe = if (uri.scheme == "file") {
       published.fingerprint?.let { matchesLegacyFile(uri, it) } == true
     } else if (Build.VERSION.SDK_INT >= 29 && uri.scheme == "content" && uri.authority == MediaStore.AUTHORITY) {
-      try {
+      published.mediaFingerprint?.let { matchesMediaFile(uri, it) } ?: try {
+        // Only used for a newly-created, still-pending row on the failure path.
         context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.OWNER_PACKAGE_NAME, MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use {
           it.moveToFirst() && it.getString(0) == context.packageName &&
             it.getString(1).orEmpty().trimEnd('/') == "${Environment.DIRECTORY_DOWNLOADS}/FT Music"

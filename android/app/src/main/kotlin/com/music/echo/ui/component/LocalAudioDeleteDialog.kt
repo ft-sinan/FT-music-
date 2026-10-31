@@ -177,7 +177,7 @@ fun LocalAudioDeleteDialog(song: Song, onDismiss: () -> Unit, onFinished: () -> 
         initial == null -> CircularProgressIndicator()
         initial is LocalAudioFileDeletion.Inspection.Ready -> {
           val target = (initial as LocalAudioFileDeletion.Inspection.Ready).target
-          Text(stringResource(R.string.ft_delete_device_confirmation, song.song.title, target.displayName))
+          Text(stringResource(R.string.ft_delete_device_confirmation, song.song.title, target.legacyPath ?: target.displayName))
         }
         initial == LocalAudioFileDeletion.Inspection.Missing -> Text(stringResource(R.string.ft_delete_device_missing_body))
         initial == LocalAudioFileDeletion.Inspection.Changed -> Text(stringResource(R.string.ft_delete_device_changed))

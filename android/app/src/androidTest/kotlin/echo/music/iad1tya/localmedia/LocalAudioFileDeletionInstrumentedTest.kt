@@ -40,6 +40,7 @@ class LocalAudioFileDeletionInstrumentedTest {
   private lateinit var context: Context
   private lateinit var deletion: LocalAudioFileDeletion
   private val created = mutableListOf<Uri>()
+  private val createdFiles = mutableListOf<File>()
   private val bytes by lazy { instrumentation.context.assets.open("test-tone.wav").use { it.readBytes() } }
 
   @Before fun setup() {
@@ -52,6 +53,7 @@ class LocalAudioFileDeletionInstrumentedTest {
 
   @After fun cleanup() {
     created.forEach { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+    createdFiles.forEach { file -> runCatching { file.delete() } }
   }
 
   private fun createSong(): Song {
@@ -68,8 +70,10 @@ class LocalAudioFileDeletionInstrumentedTest {
         @Suppress("DEPRECATION")
         val folder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "FT Music Tests")
         folder.mkdirs()
+        val file = File(folder, name)
+        createdFiles += file
         @Suppress("DEPRECATION")
-        put(MediaStore.Audio.Media.DATA, File(folder, name).absolutePath)
+        put(MediaStore.Audio.Media.DATA, file.absolutePath)
       }
     }
     val inserted = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)!!
@@ -142,15 +146,14 @@ class LocalAudioFileDeletionInstrumentedTest {
       scanner.scanDevice()
       withContext(Dispatchers.IO) {
         val before = database.getSongById(song.id)!!
-        database.update(before.song.copy(liked = true, lyricsOffset = 42))
+        // Simulate metadata saved by an older scan without trying to write read-only
+        // MediaStore columns on scoped-storage Android versions.
+        database.update(before.song.copy(title = "Outdated title", liked = true, lyricsOffset = 42,
+          dateModified = before.song.dateModified?.minusDays(1)))
       }
-      val newTitle = "Updated ${UUID.randomUUID()}"
-      assertEquals(1, context.contentResolver.update(Uri.parse(song.id), ContentValues().apply {
-        put(MediaStore.Audio.Media.TITLE, newTitle)
-      }, null, null))
       scanner.scanDevice()
       val after = withContext(Dispatchers.IO) { database.getSongById(song.id)!! }
-      assertEquals(newTitle, after.song.title)
+      assertEquals(song.song.title, after.song.title)
       assertTrue(after.song.liked)
       assertEquals(42, after.song.lyricsOffset)
       assertTrue(deletion.inspect(after) is LocalAudioFileDeletion.Inspection.Ready)
@@ -180,6 +183,23 @@ class LocalAudioFileDeletionInstrumentedTest {
     assertEquals(target, LocalAudioFileDeletion.Target.decode(target.encode()))
     val actual = context.contentResolver.openInputStream(Uri.parse(song.id))!!.use { it.readBytes() }
     assertArrayEquals(bytes, actual)
+  }
+
+  @Test fun legacyReplacementAfterConfirmationIsNotDeleted() = runBlocking {
+    if (Build.VERSION.SDK_INT > 28) return@runBlocking
+    val song = createSong()
+    val confirmed = (deletion.inspect(song) as LocalAudioFileDeletion.Inspection.Ready).target
+    val file = File(confirmed.legacyPath!!)
+    val replacement = bytes.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 1).toByte() }
+    val savedTime = file.lastModified()
+    // Create the replacement before removing the original so it cannot reuse its inode.
+    val other = File(file.parentFile, "replacement-${UUID.randomUUID()}.wav")
+    other.writeBytes(replacement)
+    assertTrue(file.delete())
+    assertTrue(other.renameTo(file))
+    assertTrue(file.setLastModified(savedTime))
+    assertEquals(LocalAudioFileDeletion.DeleteResult.Changed, deletion.deleteDirect(song, confirmed))
+    assertArrayEquals(replacement, file.readBytes())
   }
 
   @Test fun deletionAffectsOnlyTheSelectedSong() = runBlocking {
