@@ -7,9 +7,12 @@ FT_OLD_APK, FT_FIRST_APK and FT_SECOND_APK must name already verified APKs.
 import os
 from pathlib import Path
 import re
+import subprocess
+import time
 import traceback
+import xml.etree.ElementTree as ET
 
-from UiSmoke import OUT, PACKAGE, adb, capture, tap, wait_for
+from UiSmoke import OUT, PACKAGE, adb, capture, dump, labels, tap, wait_for
 
 OLD = Path(os.environ["FT_OLD_APK"])
 FIRST = Path(os.environ["FT_FIRST_APK"])
@@ -20,6 +23,30 @@ MARKER = b"FT-Music-Synthetic-Upgrade"
 
 def launch():
     adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity")
+
+
+def install(apk, replace=False):
+    args = ["install"] + (["-r"] if replace else []) + [str(apk)]
+    result = adb(*args, check=False)
+    if result.returncode:
+        raise AssertionError(f"APK install failed ({apk.name}): stdout={result.stdout.decode(errors='replace')}, stderr={result.stderr.decode(errors='replace')}")
+
+
+def enter_home():
+    # A version increase intentionally shows the welcome screen once again.
+    end = time.monotonic() + 120
+    last = []
+    while time.monotonic() < end:
+        try:
+            last = labels(dump())
+            if "Continue" in last:
+                tap("Continue")
+            elif "Account" in last:
+                return
+        except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
+            pass
+        time.sleep(0.5)
+    raise AssertionError(f"Could not reach the upgraded home screen: {last[:80]}")
 
 
 def assert_version(expected):
@@ -38,7 +65,7 @@ def main():
         if not apk.is_file():
             raise SystemExit(f"Missing signed APK: {apk}")
     try:
-        adb("install", str(OLD))
+        install(OLD)
         adb("shell", "pm", "clear", PACKAGE)
         api = int(adb("shell", "getprop", "ro.build.version.sdk").stdout.strip())
         permission = "android.permission.READ_MEDIA_AUDIO" if api >= 33 else "android.permission.READ_EXTERNAL_STORAGE"
@@ -58,11 +85,11 @@ def main():
         adb("shell", f"echo {MARKER.decode()} > {MARKER_PATH}")
         assert_marker()
         for apk in (FIRST, SECOND):
-            adb("install", "-r", str(apk))
+            install(apk, replace=True)
             assert_version(6000)
             assert_marker()
             launch()
-            wait_for("Account", timeout=120)
+            enter_home()
             adb("shell", "am", "force-stop", PACKAGE)
         capture("signed-upgrade")
         print(f"Signed upgrade passed on API {api}: v0.5 -> {FIRST.name} -> {SECOND.name}; synthetic private data preserved")
