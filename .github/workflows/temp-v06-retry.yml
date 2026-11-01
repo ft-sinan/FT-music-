@@ -1,0 +1,164 @@
+# One-time owner-approved v0.6 staging. Remove this workflow before merging.
+# Retry with the exact already signed APKs and a corrected test harness.
+name: Temporary v0.6 upgrade retry
+on:
+  push:
+    branches: [arena/ec4653dd-ft-music]
+    paths: [.github/workflows/temp-v06-retry.yml]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sign:
+    # Reuse the five already signed APKs; this retry has no access to the key.
+    if: github.repository == 'ft-sinan/FT-music-' && github.ref == 'refs/heads/arena/ec4653dd-ft-music'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-v0.6.0-signed
+          path: ${{ runner.temp }}/ft-signed
+          run-id: 41302708447
+          github-token: ${{ github.token }}
+      - name: Check signed artifact digests
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ft-signed"
+          cat > "$RUNNER_TEMP/expected-sha256.txt" <<'SHA'
+          5adedef8148b64eff25cfc2c5b95a3a7c88dde837c4765e4d08fe6ebfcf07aa3  FT-Music-v0.6.0-arm64-v8a.apk
+          af4a545c90d7774bd9bdf9ae2d5dd1101b92684bc7f5c2494dee8746edc58eec  FT-Music-v0.6.0-armeabi-v7a.apk
+          8589d343d57c4eeb3151c80cf93d15c87fd7cdfecdaf7be51232930ec0373806  FT-Music-v0.6.0-universal.apk
+          bc4b8dbc8d61f6b1411668f8405e6b0365fd5b815a3162c006ea35c17ab45839  FT-Music-v0.6.0-x86.apk
+          1e4c1cc1baf1c16ab649e184939bcba56bb4be1a416862d2dc0b518b435acfa5  FT-Music-v0.6.0-x86_64.apk
+          SHA
+          sha256sum -c "$RUNNER_TEMP/expected-sha256.txt"
+          cmp SHA256SUMS.txt "$RUNNER_TEMP/expected-sha256.txt"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ft-v0.6.0-signed
+          path: ${{ runner.temp }}/ft-signed/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+
+  upgrade:
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { api: 28, first: x86_64, second: universal }
+          - { api: 29, first: x86_64, second: universal }
+          - { api: 35, first: universal, second: x86_64 }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 0995d6bb5b916e50cf2b6c1cd5368680e4013f3a
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-v0.6.0-signed
+          path: ${{ runner.temp }}/new
+      - name: Fetch the published v0.5 APK and check signatures and hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/old"
+          gh release download v0.5.0 --repo "$GITHUB_REPOSITORY" --pattern 'FT-Music-v0.5.0.apk' --dir "$RUNNER_TEMP/old"
+          echo 'db186e13888ce2112842fe83074e6867eadc6216ba97e3894af0b8c388dc5a69  '"$RUNNER_TEMP/old/FT-Music-v0.5.0.apk" | sha256sum -c -
+          (cd "$RUNNER_TEMP/new" && sha256sum -c SHA256SUMS.txt)
+          expected=$(tr -d '[:space:]' < android/signing-cert-sha256.txt)
+          for apk in "$RUNNER_TEMP"/old/*.apk "$RUNNER_TEMP"/new/*.apk; do
+            cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+            [[ "$cert" == "$expected" ]] || { echo "Signing certificate mismatch: $apk" >&2; exit 1; }
+          done
+      - name: Prepare synthetic upgrade and post-upgrade deletion checks
+        run: |
+          cat > "$RUNNER_TEMP/run-signed-upgrade.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          adb shell svc wifi disable
+          adb shell svc data disable
+          python3 android/tests/SignedUpgradeSmoke.py 2>&1 | tee "$RUNNER_TEMP/signed-upgrade.log"
+          FT_TEST_KEEP_DATA=1 python3 android/tests/LocalDeleteUiSmoke.py 2>&1 | tee "$RUNNER_TEMP/signed-local-delete.log"
+          SCRIPT
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Check signed in-place upgrade and actual-file deletion on API ${{ matrix.api }}
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          FT_OLD_APK: ${{ runner.temp }}/old/FT-Music-v0.5.0.apk
+          FT_FIRST_APK: ${{ runner.temp }}/new/FT-Music-v0.6.0-${{ matrix.first }}.apk
+          FT_SECOND_APK: ${{ runner.temp }}/new/FT-Music-v0.6.0-${{ matrix.second }}.apk
+          ANDROID_UI_OUTPUT: ${{ runner.temp }}/signed-upgrade-output
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash "$RUNNER_TEMP/run-signed-upgrade.sh"
+      - name: Summarize upgrade failures
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root = Path(os.environ['RUNNER_TEMP'])
+          text = '\n'.join((root / name).read_text(errors='replace')[-5000:]
+                           for name in ('signed-upgrade.log', 'signed-local-delete.log') if (root / name).exists())
+          if text:
+              print('::error title=Signed upgrade check failed::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PY
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: ft-signed-upgrade-${{ matrix.api }}
+          path: |
+            ${{ runner.temp }}/signed-upgrade.log
+            ${{ runner.temp }}/signed-local-delete.log
+            ${{ runner.temp }}/signed-upgrade-output/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  stage_release:
+    needs: [sign, upgrade]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: 0995d6bb5b916e50cf2b6c1cd5368680e4013f3a
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ft-v0.6.0-signed
+          path: ${{ runner.temp }}/ft-signed
+      - name: Stage the approved pre-release for publication after review and merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'ft-sinan/FT-music-' && "$GITHUB_REF" == 'refs/heads/arena/ec4653dd-ft-music' ]]
+          [[ -z "$(git ls-remote --tags origin refs/tags/v0.6.0)" ]] || { echo 'v0.6.0 tag already exists' >&2; exit 1; }
+          (cd "$RUNNER_TEMP/ft-signed" && sha256sum -c SHA256SUMS.txt)
+          gh release create v0.6.0 \
+            "$RUNNER_TEMP/ft-signed/FT-Music-v0.6.0-universal.apk" \
+            "$RUNNER_TEMP/ft-signed/FT-Music-v0.6.0-arm64-v8a.apk" \
+            "$RUNNER_TEMP/ft-signed/FT-Music-v0.6.0-armeabi-v7a.apk" \
+            "$RUNNER_TEMP/ft-signed/FT-Music-v0.6.0-x86.apk" \
+            "$RUNNER_TEMP/ft-signed/FT-Music-v0.6.0-x86_64.apk" \
+            "$RUNNER_TEMP/ft-signed/SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --target 0995d6bb5b916e50cf2b6c1cd5368680e4013f3a \
+            --title 'FT Music v0.6.0' --notes-file .github/release-notes.md
