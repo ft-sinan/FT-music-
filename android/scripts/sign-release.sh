@@ -24,6 +24,9 @@ fi
 [[ -f "$UNSIGNED" && -f "$KEY" && -f "$CERT" ]] || { echo "Unsigned APK, private key or certificate is missing." >&2; exit 1; }
 VERSION=$(python3 "$ROOT/android/scripts/release-version.py")
 CODE=$(python3 "$ROOT/android/scripts/release-version.py" --code-only)
+ABI=${FT_APK_ABI:-universal}
+# Refuse misnamed, multi-ABI or malformed native libraries before signing.
+python3 "$ROOT/android/scripts/verify-apk-abi.py" "$UNSIGNED" "$ABI"
 EXPECTED=$(tr -d '[:space:]' < "$ROOT/android/signing-cert-sha256.txt")
 ACTUAL=$(openssl x509 -inform DER -in "$CERT" -noout -fingerprint -sha256 | sed 's/^.*=//;s/://g' | tr '[:upper:]' '[:lower:]')
 [[ "$ACTUAL" == "$EXPECTED" ]] || { echo "Signing certificate does not match the installed FT Music app. Refusing to publish an incompatible update." >&2; exit 1; }
@@ -33,7 +36,7 @@ mkdir -p "$OUTPUT"
 TEMP=$(mktemp -d)
 trap 'rm -rf "$TEMP"' EXIT
 "$TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$TEMP/aligned.apk"
-APK="$OUTPUT/FT-Music-v${VERSION}.apk"
+APK="$OUTPUT/FT-Music-v${VERSION}-${ABI}.apk"
 "$TOOLS/apksigner" sign --key "$KEY" --cert "$CERT" --out "$APK" "$TEMP/aligned.apk"
 "$TOOLS/apksigner" verify --verbose --print-certs "$APK"
 "$TOOLS/zipalign" -c -p 4 "$APK"

@@ -123,7 +123,9 @@ def approve_android_if_needed():
 
 def main():
     api = int(shell("getprop", "ro.build.version.sdk").strip())
-    shell("pm", "clear", PACKAGE)
+    keep_data = os.environ.get("FT_TEST_KEEP_DATA") == "1"
+    if not keep_data:
+        shell("pm", "clear", PACKAGE)
     audio_permission = "android.permission.READ_MEDIA_AUDIO" if api >= 33 else "android.permission.READ_EXTERNAL_STORAGE"
     shell("pm", "grant", PACKAGE, audio_permission)
     if api >= 33:
@@ -134,8 +136,11 @@ def main():
         ensure_media_indexed(Path(path).name)
     try:
         shell("am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity")
-        wait_for("Continue", timeout=90)
-        tap("Continue")
+        if keep_data:
+            wait_for("Account", timeout=90)
+        else:
+            wait_for("Continue", timeout=90)
+            tap("Continue")
         open_local()
         wait_for("Scan device", timeout=60)
         tap("Scan device")
