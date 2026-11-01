@@ -636,7 +636,7 @@ fun LocalSongScreen(
                 ) {
                   Icon(
                     painter = painterResource(R.drawable.more_vert),
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.more_options),
                   )
                 }
               }

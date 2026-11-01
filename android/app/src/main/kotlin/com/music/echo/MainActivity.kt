@@ -344,6 +344,11 @@ class MainActivity : ComponentActivity() {
     bindService(Intent(this, MusicService::class.java), serviceConnection, BIND_AUTO_CREATE)
   }
 
+  override fun onResume() {
+    super.onResume()
+    downloadUtil.refreshSharedDownloads()
+  }
+
   override fun onStop() {
     unbindService(serviceConnection)
     super.onStop()
@@ -1210,6 +1215,7 @@ class MainActivity : ComponentActivity() {
 
         val ringtoneViewModel: RingtoneViewModel = viewModel()
         val ringtoneUiState by ringtoneViewModel.uiState.collectAsState()
+        val localAudioDeletion: LocalAudioDeletionViewModel = hiltViewModel()
 
         val customHapticFeedback =
           remember(hapticHelper) {
@@ -1235,6 +1241,7 @@ class MainActivity : ComponentActivity() {
           LocalGlassEffectConfig provides glassEffectConfig,
           LocalAppBackdrop provides appBackdrop,
           LocalRingtoneViewModel provides ringtoneViewModel,
+          LocalAudioDeletion provides localAudioDeletion,
           LocalDatabase provides database,
           LocalContentColor provides
             if (pureBlack) Color.White else contentColorFor(MaterialTheme.colorScheme.surface),
@@ -1246,6 +1253,14 @@ class MainActivity : ComponentActivity() {
           LocalListenTogetherManager provides listenTogetherManager,
           LocalExpandPlayer provides expandPlayer,
         ) {
+          PlaybackAndStoragePrompts(playerConnection, downloadUtil)
+          localAudioDeletion.selectedSong?.let { song ->
+            LocalAudioDeleteDialog(
+              song = song,
+              onDismiss = localAudioDeletion::clear,
+              onFinished = localAudioDeletion::clear,
+            )
+          }
           Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {

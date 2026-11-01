@@ -204,6 +204,21 @@ constructor(
               isLocal = true,
             ),
           )
+          if (existingSong?.isLocal == true) {
+            // A rescan must refresh the identity fields used to validate a later deletion,
+            // while preserving the user's likes, play history and other song settings.
+            update(existingSong.copy(
+              title = track.title,
+              duration = track.durationSeconds,
+              thumbnailUrl = track.thumbnailUrl ?: existingSong.thumbnailUrl?.takeIf {
+                !it.startsWith("content://media/external/audio/media/")
+              },
+              albumId = track.albumId,
+              albumName = track.albumName,
+              year = track.year ?: existingSong.year,
+              dateModified = track.dateModified ?: existingSong.dateModified,
+            ))
+          }
           upsert(
             FormatEntity(
               id = track.id,

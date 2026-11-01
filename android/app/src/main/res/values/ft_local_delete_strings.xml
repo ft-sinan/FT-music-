@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ft_delete_device_file">Delete from device</string>
+    <string name="ft_delete_device_file_desc">Permanently delete the actual audio file</string>
+    <string name="ft_delete_device_title">Delete this song?</string>
+    <string name="ft_delete_device_confirmation">Delete “%1$s” from this device?\n\nFile: %2$s\n\nThe actual audio file will be permanently deleted, not just removed from FT Music. It will also be removed from FT Music favorites, playlists, and listening history. This cannot be undone.</string>
+    <string name="ft_delete_device_missing_title">File not found</string>
+    <string name="ft_delete_device_missing_body">This file appears to have already been deleted. Remove its entry from FT Music? It will also be removed from favorites, playlists, and listening history.</string>
+    <string name="ft_delete_device_remove_entry">Remove entry</string>
+    <string name="ft_delete_device_changed">The file has changed since the last scan. Scan your device again before deleting it.</string>
+    <string name="ft_delete_device_unavailable">FT Music cannot access this file. Check your audio permission and scan your device again.</string>
+    <string name="ft_delete_device_failed">The file could not be deleted. Nothing was removed from your FT Music library.</string>
+    <string name="ft_delete_device_unverified">Android could not confirm whether the file was removed. Check Files and scan your device again.</string>
+    <string name="ft_delete_device_cancelled">Deletion cancelled. The file was not removed.</string>
+    <string name="ft_delete_device_permission_denied">Storage permission was denied. The file was not removed.</string>
+    <string name="ft_delete_device_done">Song deleted from the device.</string>
+    <string name="ft_delete_device_entry_removed">Missing song removed from FT Music.</string>
+    <string name="ft_delete_device_library_error">The file was deleted, but FT Music could not update its library. Scan your device again.</string>
+</resources>

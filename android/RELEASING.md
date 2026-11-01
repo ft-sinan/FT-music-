@@ -19,14 +19,14 @@ Only reviewed workflows should ever access the secret. The release workflow buil
 1. Test the app on real devices, including upgrade installation, YouTube sign-in/sync, playback and downloads. Review the GPL source/notice requirements and third-party terms. No such physical-device verification has yet been completed for this fork.
 2. Increase `versionName` in `version.properties`. The build computes `major × 1,000,000 + minor × 1,000 + patch` as the Android version code. Published versions must increase; for example `0.5.0` has code `5000`.
 3. Review and merge the release commit to `main`. Confirm `.github/release-notes.md` is accurate and discloses the fresh library and unverified features.
-4. Run **Publish Android release** on the reviewed `main` commit, using pre-release status for unverified builds. It tests and builds the universal GMS APK in an unprivileged job, transfers the unsigned artifact to a fresh job, verifies the pinned certificate and APK identity, signs, then publishes the release. It rejects duplicate version tags.
-5. Verify the tag points at the reviewed source, the `FT-Music-vMAJOR.MINOR.PATCH.apk` asset is present, and Android package/version/certificate match. Install over the previous release on a physical device before calling it stable.
+4. Run **Publish Android release** on the reviewed `main` commit, using pre-release status for unverified builds. It builds universal, arm64-v8a, armeabi-v7a, x86 and x86_64 GMS APKs in unprivileged jobs. It checks ELF architectures and native library parity with the universal APK, then transfers the unsigned artifacts to a fresh job that verifies the pinned certificate and APK identity, signs, and publishes them with SHA-256 checksums. It rejects duplicate version tags.
+5. Verify the tag points at the reviewed source; all five `FT-Music-vMAJOR.MINOR.PATCH-ARCH.apk` files and `SHA256SUMS.txt` are present; and package, version, architecture and certificate match. Install over the previous release on a physical device before calling it stable.
 
 For manual builds, use JDK 21, Android SDK Platform 37.0, NDK `28.2.13676358` and CMake `3.22.1`:
 
 ```bash
 cd android
-./gradlew testUniversalGmsDebugUnitTest assembleUniversalGmsRelease
+./gradlew testUniversalGmsDebugUnitTest assembleUniversalGmsRelease assembleArm64GmsRelease assembleArmeabiGmsRelease assembleX86GmsRelease assembleX86_64GmsRelease
 ```
 
-From the repository root, run `android/scripts/sign-release.sh /private/path/temp-key.pk8 /private/path/temp-cert.der /private/output` with Android SDK build-tools 35.0.0 installed. The script signs exactly one unsigned universal GMS output, or the file specified by `FT_UNSIGNED_APK`, and verifies package, version, certificate, alignment and signature. Never commit the key or APK.
+From the repository root, run `android/scripts/sign-release.sh /private/path/temp-key.pk8 /private/path/temp-cert.der /private/output` with Android SDK build-tools 35.0.0 installed. The script signs exactly one unsigned universal GMS output, or the file specified by `FT_UNSIGNED_APK`; set `FT_APK_ABI` to `arm64-v8a`, `armeabi-v7a`, `x86` or `x86_64` for a corresponding single-architecture build. It verifies package, version, ELF architecture, certificate, alignment and signature. Never commit the key or APK.

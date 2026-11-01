@@ -1,0 +1,108 @@
+name: Android architecture packages
+
+on:
+  push:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-abi-checks.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-abi-checks.yml'
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Package ${{ matrix.abi }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { abi: universal, flavor: universal, task: assembleUniversalGmsRelease }
+          - { abi: arm64-v8a, flavor: arm64, task: assembleArm64GmsRelease }
+          - { abi: armeabi-v7a, flavor: armeabi, task: assembleArmeabiGmsRelease }
+          - { abi: x86, flavor: x86, task: assembleX86GmsRelease }
+          - { abi: x86_64, flavor: x86_64, task: assembleX86_64GmsRelease }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - name: Install Android SDK and native tools
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"'
+      - name: Build unsigned ${{ matrix.abi }} APK without signing credentials
+        working-directory: android
+        env:
+          GRADLE_TASK: ${{ matrix.task }}
+          ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          tasks=("$GRADLE_TASK")
+          if [[ "$ABI" == universal ]]; then
+            python3 tests/ForkConfigurationTest.py
+            python3 tests/ReleaseVersionTest.py
+            python3 tests/ApkArchitectureTest.py
+            tasks+=(testUniversalGmsDebugUnitTest)
+          fi
+          ./gradlew --no-daemon --stacktrace "${tasks[@]}" 2>&1 | tee "$RUNNER_TEMP/ft-abi-build.log"
+      - name: Summarize a build failure
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          log = Path(os.environ['RUNNER_TEMP']) / 'ft-abi-build.log'
+          if log.exists():
+              text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log.read_text(errors='replace'))
+              start = max(text.rfind('FAILURE:'), text.rfind('* What went wrong:'))
+              text = (text[start:] if start >= 0 else text[-7000:])[:7000]
+              print('::error title=ABI build failure::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PY
+      - name: Verify APK identity and native architecture
+        env:
+          FLAVOR: ${{ matrix.flavor }}
+          ABI: ${{ matrix.abi }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find "android/app/build/outputs/apk/${FLAVOR}Gms/release" -maxdepth 1 -name '*-unsigned.apk' -type f)
+          [[ ${#files[@]} == 1 ]] || { echo 'Expected one unsigned APK for the selected flavor.' >&2; exit 1; }
+          version=$(python3 android/scripts/release-version.py)
+          code=$(python3 android/scripts/release-version.py --code-only)
+          badging=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "${files[0]}")
+          [[ "$badging" == *"name='com.ftmusic.app'"* && "$badging" == *"versionCode='$code'"* && "$badging" == *"versionName='$version'"* && "$badging" == *"application-label:'FT Music'"* ]] || { echo 'Unexpected APK package, version or branding.' >&2; exit 1; }
+          python3 android/scripts/verify-apk-abi.py "${files[0]}" "$ABI"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ft-unsigned-${{ matrix.abi }}
+          path: android/app/build/outputs/apk/${{ matrix.flavor }}Gms/release/*-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  compare:
+    name: Compare native libraries across packages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: ft-unsigned-*
+          path: ${{ runner.temp }}/ft-unsigned
+      - name: Check every architecture has the same native libraries as the universal build
+        run: |
+          set -euo pipefail
+          mapfile -t reference < <(find "$RUNNER_TEMP/ft-unsigned/ft-unsigned-universal" -maxdepth 1 -name '*-unsigned.apk' -type f)
+          [[ ${#reference[@]} == 1 ]]
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            mapfile -t files < <(find "$RUNNER_TEMP/ft-unsigned/ft-unsigned-$abi" -maxdepth 1 -name '*-unsigned.apk' -type f)
+            [[ ${#files[@]} == 1 ]]
+            python3 android/scripts/verify-apk-abi.py "${files[0]}" "$abi" --reference "${reference[0]}"
+          done

@@ -210,6 +210,10 @@ fun AutoPlaylistScreen(
   val downloadUtil = LocalDownloadUtil.current
   var downloadState by remember { mutableIntStateOf(Download.STATE_STOPPED) }
 
+  LaunchedEffect(playlistId) {
+    if (playlistType == PlaylistType.DOWNLOAD) downloadUtil.refreshSharedDownloads()
+  }
+
   LaunchedEffect(Unit) {
     if (ytmSync) {
       withContext(Dispatchers.IO) {
@@ -307,7 +311,7 @@ fun AutoPlaylistScreen(
 
   val isRefreshing by viewModel.isRefreshing.collectAsState()
   val pullRefreshState = rememberPullToRefreshState()
-  val canRefresh = playlistType == PlaylistType.LIKE || playlistType == PlaylistType.UPLOADED
+  val canRefresh = playlistType == PlaylistType.LIKE || playlistType == PlaylistType.UPLOADED || playlistType == PlaylistType.DOWNLOAD
 
   Box(
     modifier =
@@ -317,7 +321,10 @@ fun AutoPlaylistScreen(
             Modifier.pullToRefresh(
               state = pullRefreshState,
               isRefreshing = isRefreshing,
-              onRefresh = viewModel::refresh
+              onRefresh = {
+                if (playlistType == PlaylistType.DOWNLOAD) downloadUtil.refreshSharedDownloads()
+                else viewModel.refresh()
+              }
             )
           } else {
             Modifier

@@ -67,6 +67,46 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("update") { UpdateSettings(navController, scrollBehavior) }', nav)
         self.assertNotIn('if (getAutoUpdateCheckSetting(context))', activity)
 
+    def test_local_file_deletion_requires_confirmation_and_targets_only_local_rows(self):
+        menu = (MAIN / "kotlin/com/music/echo/ui/menu/SongMenu.kt").read_text()
+        dialog = (MAIN / "kotlin/com/music/echo/ui/component/LocalAudioDeleteDialog.kt").read_text()
+        deletion = (MAIN / "kotlin/com/music/echo/localmedia/LocalAudioFileDeletion.kt").read_text()
+        dao = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/db/DatabaseDao.kt").read_text()
+        activity = (MAIN / "kotlin/com/music/echo/MainActivity.kt").read_text()
+        controller = (MAIN / "kotlin/com/music/echo/ui/component/LocalAudioDeletionViewModel.kt").read_text()
+        self.assertIn("if (song.song.isLocal)", menu)
+        self.assertIn("localAudioDeletion.request(song)", menu)
+        self.assertIn("LocalAudioDeleteDialog(", activity)
+        self.assertIn("SavedStateHandle", controller)
+        self.assertIn("MediaStore.createDeleteRequest", deletion)
+        self.assertIn("Environment.isExternalStorageLegacy()", deletion)
+        self.assertIn("WRITE_EXTERNAL_STORAGE", dialog)
+        self.assertIn("deleteLegacy(inspected.target)", deletion)
+        self.assertIn("deleteLocalSongById(song.id)", dialog)
+        self.assertIn("WHERE id = :songId AND isLocal = 1", dao)
+        manifest = ET.parse(MAIN / "AndroidManifest.xml").getroot()
+        self.assertEqual(manifest.find("application").get(ANDROID + "requestLegacyExternalStorage"), "true")
+        write = next(el for el in manifest.findall("uses-permission")
+                     if el.get(ANDROID + "name") == "android.permission.WRITE_EXTERNAL_STORAGE")
+        self.assertEqual(write.get(ANDROID + "maxSdkVersion"), "29")
+
+    def test_search_suggestions_pass_song_metadata_to_local_matcher(self):
+        suggestions = (MAIN / "kotlin/com/music/echo/ui/screens/search/suggestions/SuggestionsViewModel.kt").read_text()
+        self.assertEqual(suggestions.count('YouTubeQueue(WatchEndpoint(videoId = bestMatch.id), bestMatch.toMediaMetadata())'), 2)
+
+    def test_device_specific_download_mappings_are_never_backed_up(self):
+        store = (MAIN / "kotlin/com/music/echo/playback/SharedDownloadStore.kt").read_text()
+        names = {"ft_shared_downloads", "ft_shared_pending_removals"}
+        for name in names:
+            self.assertIn(f'getSharedPreferences("{name}"', store)
+        expected = {f"{name}.xml" for name in names}
+        legacy = ET.parse(MAIN / "res/xml/backup_rules.xml").getroot()
+        self.assertTrue(expected <= {el.get("path") for el in legacy.findall("exclude") if el.get("domain") == "sharedpref"})
+        modern = ET.parse(MAIN / "res/xml/data_extraction_rules.xml").getroot()
+        for section in ("cloud-backup", "device-transfer"):
+            exclusions = {el.get("path") for el in modern.findall(f"{section}/exclude") if el.get("domain") == "sharedpref"}
+            self.assertTrue(expected <= exclusions, section)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

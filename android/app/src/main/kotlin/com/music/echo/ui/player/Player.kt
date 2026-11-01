@@ -248,6 +248,15 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
+private fun selectedAudioFormat(tracks: androidx.media3.common.Tracks): androidx.media3.common.Format? {
+  tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.forEach { group ->
+    for (index in 0 until group.length) {
+      if (group.isTrackSelected(index)) return group.getTrackFormat(index)
+    }
+  }
+  return null
+}
+
 private data class WavyShape(val sides: Int, val indent: Float, val rotationDegrees: Float) :
   Shape {
   override fun createOutline(
@@ -311,6 +320,7 @@ fun BottomSheetPlayer(
   val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
   val showLyricsOnPlayer by rememberPreference(ShowLyricsOnPlayerKey, false)
   val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+  val playbackOrigins by playerConnection.service.playbackOrigins.collectAsState()
   val isLocalMedia = mediaMetadata?.id?.isLocalMediaId() == true
 
   val playerBackgroundPref by
@@ -359,15 +369,14 @@ fun BottomSheetPlayer(
     val listener =
       object : Player.Listener {
         override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
-          val audioTrack = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO }
-          currentAudioFormat = audioTrack?.getTrackFormat(0)
+          currentAudioFormat = selectedAudioFormat(tracks)
+        }
+        override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+          currentAudioFormat = null
         }
       }
     playerToListen.addListener(listener)
-    currentAudioFormat =
-      playerToListen.currentTracks.groups
-        .firstOrNull { it.type == C.TRACK_TYPE_AUDIO }
-        ?.getTrackFormat(0)
+    currentAudioFormat = selectedAudioFormat(playerToListen.currentTracks)
     onDispose { playerToListen.removeListener(listener) }
   }
   val swipeLyrics by rememberPreference(SwipeLyricsKey, false)
@@ -429,7 +438,6 @@ fun BottomSheetPlayer(
     }
 
   val playbackState by playerConnection.playbackState.collectAsState()
-  val currentFormatEntity by database.format(mediaMetadata?.id).collectAsState(initial = null)
   val currentSong by playerConnection.currentSong.collectAsState(initial = null)
   val automix by playerConnection.service.automixItems.collectAsState()
   val repeatMode by playerConnection.repeatMode.collectAsState()
@@ -1655,6 +1663,28 @@ fun BottomSheetPlayer(
           }
 
           Spacer(Modifier.height(4.dp))
+          val sourceLabel = if (isCasting) "Casting" else when (playbackOrigins[mediaMetadata.id]) {
+            echo.music.iad1tya.playback.PlaybackOrigin.DEVICE -> "On device"
+            echo.music.iad1tya.playback.PlaybackOrigin.FT_DOWNLOAD -> "FT download"
+            echo.music.iad1tya.playback.PlaybackOrigin.STREAM -> "Streaming / cache"
+            else -> "Source unknown"
+          }
+          val qualityLabel = if (isCasting) "Quality unknown" else {
+            echo.music.iad1tya.playback.PlaybackQuality.describe(
+              currentAudioFormat?.sampleMimeType,
+              currentAudioFormat?.codecs,
+              currentAudioFormat?.bitrate ?: -1,
+              currentAudioFormat?.sampleRate ?: -1,
+            )
+          }
+          Text(
+            text = "$sourceLabel · $qualityLabel",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextBackgroundColor.copy(alpha = 0.76f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Spacer(Modifier.height(4.dp))
 
           if (isCasting && castDeviceName != null) {
             Row(
@@ -2216,51 +2246,14 @@ fun BottomSheetPlayer(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
-          val formatText =
-            remember(currentAudioFormat, currentFormatEntity) {
-              val localAudioFormat = currentAudioFormat
-              val localFormatEntity = currentFormatEntity
-
-              val sampleMime = localAudioFormat?.sampleMimeType?.lowercase().orEmpty()
-              val entityMime = localFormatEntity?.mimeType?.lowercase().orEmpty()
-              val entityCodecs = localFormatEntity?.codecs?.lowercase().orEmpty()
-
-              val codecStr = when {
-                sampleMime.contains("alac") -> "ALAC"
-                sampleMime.contains("flac") -> "FLAC"
-                sampleMime.contains("opus") -> "OPUS"
-                sampleMime.contains("mp4a") || sampleMime.contains("aac") -> "AAC"
-                sampleMime.contains("mpeg") || sampleMime.contains("mp3") -> "MP3"
-                sampleMime.contains("vorbis") -> "VORBIS"
-                // Fallbacks if ExoPlayer track format not ready yet:
-                entityCodecs.contains("alac") || entityMime.contains("alac") -> "ALAC"
-                entityCodecs.contains("flac") || entityMime.contains("flac") -> "FLAC"
-                entityCodecs.contains("opus") || entityMime.contains("opus") || entityMime.contains("webm") -> "OPUS"
-                entityCodecs.contains("mp4a") || entityCodecs.contains("aac") || entityMime.contains("mp4") -> "AAC"
-                entityCodecs.contains("mp3") || entityMime.contains("mpeg") -> "MP3"
-                entityCodecs.isNotBlank() && entityCodecs != "unknown" -> entityCodecs.uppercase()
-                sampleMime.isNotBlank() -> sampleMime.substringAfter("audio/").uppercase()
-                entityMime.isNotBlank() -> entityMime.substringAfter("audio/").uppercase()
-                else -> ""
-              }
-
-              val rawBitrate = when {
-                localAudioFormat != null && localAudioFormat.bitrate > 0 -> localAudioFormat.bitrate
-                localAudioFormat != null && localAudioFormat.averageBitrate > 0 -> localAudioFormat.averageBitrate
-                localFormatEntity != null && localFormatEntity.bitrate > 0 -> {
-                  // Guard against stale poisoned bitrate (e.g. 1411200 saved for an opus/aac stream)
-                  if ((codecStr == "OPUS" || codecStr == "AAC") && localFormatEntity.bitrate > 400000) {
-                    if (codecStr == "OPUS") 160000 else 256000
-                  } else {
-                    localFormatEntity.bitrate
-                  }
-                }
-                else -> 0
-              }
-
-              val bitrateStr = if (rawBitrate > 0) "${rawBitrate / 1000} kbps" else ""
-              listOf(codecStr, bitrateStr).filter { it.isNotEmpty() }.joinToString(" • ")
-            }
+          val formatText = remember(currentAudioFormat) {
+            echo.music.iad1tya.playback.PlaybackQuality.describe(
+              currentAudioFormat?.sampleMimeType,
+              currentAudioFormat?.codecs,
+              currentAudioFormat?.bitrate ?: -1,
+              currentAudioFormat?.sampleRate ?: -1,
+            ).takeUnless { it == "Quality unknown" }.orEmpty()
+          }
 
           val isBuffering = playbackState == androidx.media3.common.Player.STATE_BUFFERING
 

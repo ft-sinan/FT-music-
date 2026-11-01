@@ -463,6 +463,8 @@ fun SettingsScreen(
       if (systemGroup.isNotEmpty()) {
         Material3SettingsGroup(scrollState = scrollState, items = systemGroup)
       }
+      Spacer(modifier = Modifier.height(24.dp))
+      CreatorSpace(onCredits = { navController.navigate("settings/about") })
     }
 
     Spacer(modifier = Modifier.height(50.dp))

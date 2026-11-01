@@ -211,6 +211,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
@@ -476,6 +477,24 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   @Inject @PlayerCache lateinit var playerCache: SimpleCache
 
   @Inject @DownloadCache lateinit var downloadCache: SimpleCache
+  @Inject lateinit var sharedDownloadStore: SharedDownloadStore
+  @Inject lateinit var activePlaybackTracker: ActivePlaybackTracker
+  @Inject @echo.music.iad1tya.di.ApplicationScope lateinit var applicationScope: CoroutineScope
+
+  private val selectedLocalFiles = ConcurrentHashMap<String, android.net.Uri>()
+  val playbackOrigins = MutableStateFlow<Map<String, PlaybackOrigin>>(emptyMap())
+
+  fun selectLocalFile(mediaId: String, uri: android.net.Uri?) {
+    if (uri == null) selectedLocalFiles.remove(mediaId) else selectedLocalFiles[mediaId] = uri
+  }
+
+  private fun setPlaybackOrigin(id: String, origin: PlaybackOrigin) {
+    playbackOrigins.update { old ->
+      // Bound the map: queues and preloading can resolve many IDs during a session.
+      val next = if (old.size >= 200 && id !in old) emptyMap() else old
+      next + (id to origin)
+    }
+  }
 
   lateinit var player: ExoPlayer
     private set
@@ -3589,6 +3608,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     return ResolvingDataSource.Factory(DefaultDataSource.Factory(this, createCacheDataSource())) {
       dataSpec ->
       val mediaId = dataSpec.key ?: error("No media id")
+      // Exo may open current, prebuffered and crossfading tracks concurrently.
+      // Keep any private cache they touched until all players have been released.
+      activePlaybackTracker.retain(mediaId)
       if (mediaId.isLocalMediaId()) {
         val localUri = android.net.Uri.parse(mediaId)
         try {
@@ -3600,9 +3622,30 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
             androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
           )
         }
+        setPlaybackOrigin(mediaId, PlaybackOrigin.DEVICE)
         return@Factory dataSpec
       }
 
+      // Honour a chosen device file first, then the app's exact shared download.
+      // Keep the online media ID/tag so queues, likes and YouTube sync remain intact.
+      val selectedFile = selectedLocalFiles[mediaId]
+      if (selectedFile != null) {
+        val readable = try {
+          contentResolver.openFileDescriptor(selectedFile, "r")?.use { true } ?: false
+        } catch (_: Exception) { false }
+        if (readable) {
+          setPlaybackOrigin(mediaId, PlaybackOrigin.DEVICE)
+          return@Factory dataSpec.withUri(selectedFile)
+        }
+        selectedLocalFiles.remove(mediaId, selectedFile)
+      }
+      val sharedUri = sharedDownloadStore.recordedUri(mediaId)
+      if (sharedUri != null && sharedDownloadStore.state(mediaId) == SharedDownloadStore.FileState.PRESENT) {
+        setPlaybackOrigin(mediaId, PlaybackOrigin.FT_DOWNLOAD)
+        return@Factory dataSpec.withUri(sharedUri)
+      }
+
+      setPlaybackOrigin(mediaId, PlaybackOrigin.STREAM)
       var shouldBypassCache = bypassCacheForQualityChange.contains(mediaId)
 
       val dbFormat = runBlocking(Dispatchers.IO) { database.format(mediaId).firstOrNull() }
@@ -3615,8 +3658,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           .takeIf { it != androidx.media3.common.C.LENGTH_UNSET.toLong() }
           ?: dbFormat?.contentLength
           ?: -1L
+      val verifiedPrivateDownload = cachedLength > 0 && downloadCache.isCached(mediaId, 0, cachedLength)
       val isFullyDownloaded =
-        (cachedLength > 0 && downloadCache.isCached(mediaId, 0, cachedLength)) ||
+        verifiedPrivateDownload ||
           (dbSong?.song?.isDownloaded == true && downloadCache.getCachedSpans(mediaId).isNotEmpty())
 
       val activeQualityInCache =
@@ -3640,6 +3684,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
 
       if (!shouldBypassCache) {
         if (isFullyDownloaded) {
+          setPlaybackOrigin(mediaId, if (verifiedPrivateDownload) PlaybackOrigin.FT_DOWNLOAD else PlaybackOrigin.UNKNOWN)
           scope.launch(Dispatchers.IO) { recoverSong(mediaId, isOfflinePlayback = true) }
           return@Factory dataSpec
         }
@@ -4203,6 +4248,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     playerEqProcessors.remove(player)?.let { dspController.removeAudioProcessor(it) }
 
     player.release()
+    val playedIds = activePlaybackTracker.releaseAll()
+    applicationScope.launch(Dispatchers.IO) {
+      playedIds.forEach { sharedDownloadStore.cleanupRedundantCache(it) }
+    }
     discordUpdateJob?.cancel()
     scope.cancel()
     super.onDestroy()
