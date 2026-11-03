@@ -96,8 +96,8 @@ class DownloadQualityInstrumentedTest {
         instrumentation.runOnMainSync { current.downloadManager.removeDownload(id) }
         withTimeoutOrNull(10_000) { while (current.downloads.value.containsKey(id)) delay(50) }
       }
-      instrumentation.runOnMainSync { current.downloadManager.release() }
       current.release()
+      instrumentation.runOnMainSync { current.downloadManager.release() }
     }
     store.delete(id)
     sources.remove(id)

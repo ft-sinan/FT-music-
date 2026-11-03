@@ -408,6 +408,21 @@ fun QueueMenu(
       )
     }
 
+    if (download?.state == Download.STATE_FAILED) {
+      item { Spacer(modifier = Modifier.height(12.dp)) }
+      item {
+        Material3MenuGroup(
+          items = listOf(
+            Material3MenuItemData(
+              title = { Text(stringResource(R.string.ft_remove_failed_download)) },
+              icon = { Icon(painter = painterResource(R.drawable.delete), contentDescription = null) },
+              onClick = { DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, mediaMetadata.id, false) }
+            )
+          )
+        )
+      }
+    }
+
     item { Spacer(modifier = Modifier.height(12.dp)) }
 
     item {

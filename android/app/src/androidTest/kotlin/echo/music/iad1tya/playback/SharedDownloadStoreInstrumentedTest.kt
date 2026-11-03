@@ -97,8 +97,8 @@ class SharedDownloadStoreInstrumentedTest {
     }
     File(context.filesDir, "$id-local.wav").delete()
     util?.let { current ->
-      instrumentation.runOnMainSync { current.downloadManager.release() }
       current.release()
+      instrumentation.runOnMainSync { current.downloadManager.release() }
     }
     runBlocking { store.delete(id) }
     sources.remove(id)
@@ -212,7 +212,8 @@ class SharedDownloadStoreInstrumentedTest {
     assertArrayEquals(bytes, read(uri))
     if (uri.scheme == "file") assertTrue(uri.path!!.endsWith(".wav"))
     else {
-      assertEquals("audio/wav", context.contentResolver.getType(uri))
+      // Some MediaStore versions canonicalize audio/wav to audio/x-wav.
+      assertTrue(context.contentResolver.getType(uri) in setOf("audio/wav", "audio/x-wav"))
       val name = context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)!!.use {
         assertTrue(it.moveToFirst())
         it.getString(0)

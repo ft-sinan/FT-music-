@@ -465,8 +465,12 @@ constructor(
         .map { it[DownloadOnWifiOnlyKey] ?: false }
         .distinctUntilChanged()
         .collectLatest { wifiOnly ->
-          downloadManager.requirements =
-            Requirements(if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK)
+          // Media3 requires all DownloadManager access on its application looper.
+          // Updating the watcher on IO can race a download/release on the main thread.
+          kotlinx.coroutines.withContext(Dispatchers.Main) {
+            downloadManager.requirements =
+              Requirements(if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK)
+          }
         }
     }
   }
