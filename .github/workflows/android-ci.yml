@@ -54,9 +54,11 @@ jobs:
           if not log.exists(): log = temp / 'ft-sdk.log'
           if log.exists():
               text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log.read_text(errors='replace'))
+              compiler_errors = '\n'.join(re.findall(r'(?m)^e: .+$', text)[:30])
               start = max(text.rfind('FAILURE:'), text.rfind('* What went wrong:'))
               text = text[start:] if start >= 0 else text[-7000:]
               text = text[:7000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              text = ((compiler_errors.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A') + '%0A') if compiler_errors else '') + text
               print('::error title=Android build failure::' + text)
           PY
       - name: Inspect unsigned APK

@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import androidx.core.content.getSystemService
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.datasource.ResolvingDataSource
-import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.offline.Download
@@ -29,13 +28,14 @@ import echo.music.iad1tya.db.entities.FormatEntity
 import echo.music.iad1tya.db.entities.LyricsEntity
 import echo.music.iad1tya.db.entities.SongEntity
 import echo.music.iad1tya.di.DownloadCache
-import echo.music.iad1tya.di.PlayerCache
+import echo.music.iad1tya.R
 import echo.music.iad1tya.lyrics.LyricsProviderRegistry
 import echo.music.iad1tya.lyrics.LyricsUtils
 import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.YTPlayerUtils
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.enumPreference
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -75,24 +75,30 @@ constructor(
   val database: MusicDatabase,
   val databaseProvider: DatabaseProvider,
   @DownloadCache val downloadCache: SimpleCache,
-  @PlayerCache val playerCache: SimpleCache,
   val sharedDownloadStore: SharedDownloadStore,
+  private val sourceRegistry: DownloadSourceRegistry,
 ) {
   private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
   private val downloadQuality by
     enumPreference(
       context,
       DownloadQualityKey,
-      DownloadQuality.YOUTUBE
+      DownloadQuality.HIGH
     )
   private val ipVersion by enumPreference(context, IpVersionKey, IpVersion.AUTO)
   private val songUrlCache = ConcurrentHashMap<String, ResolvedStream>()
+
+  // Injectable in instrumented tests so cache isolation can be exercised without YouTube access.
+  @Volatile internal var resolveDownloadSource: suspend (String, AudioQuality) -> YTPlayerUtils.PlaybackData = { id, quality ->
+    YTPlayerUtils.playerResponseForPlayback(id, audioQuality = quality, connectivityManager = connectivityManager).getOrThrow()
+  }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   val downloads = MutableStateFlow<Map<String, Download>>(emptyMap())
   val legacyWritePermissionNeeded = MutableStateFlow(false)
   val sharedDownloadProblem = MutableStateFlow<String?>(null)
+  val downloadSourceProblem = MutableStateFlow<String?>(null)
   val sharedDownloadBytes = MutableStateFlow(0L)
   private val publishJobs = ConcurrentHashMap<String, Job>()
   private val downloadedFlagLock = Mutex()
@@ -177,41 +183,33 @@ constructor(
     }
   }
 
-  private val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
+  internal val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
     ResolvingDataSource.Factory(
       ChunkingDataSourceFactory(
-        // Read already-streamed bytes from playerCache instead of re-downloading them:
-        // a song played before being downloaded would otherwise be fetched twice.
-        CacheDataSource.Factory()
-          .setCache(playerCache)
-          .setUpstreamDataSourceFactory(
-            OkHttpDataSource.Factory(
-              OkHttpClient.Builder()
-                .dns(
-                  object : Dns {
-                    override fun lookup(hostname: String): List<InetAddress> {
-                      val addresses = Dns.SYSTEM.lookup(hostname)
-                      return when (this@DownloadUtil.ipVersion) {
-                        IpVersion.IPV4 ->
-                          addresses.filter { it is Inet4Address }.ifEmpty { addresses }
-                        IpVersion.IPV6 ->
-                          addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                        IpVersion.AUTO -> addresses
-                      }
-                    }
+        // Streaming cache is keyed only by song ID and may contain a different format.
+        // DownloadManager writes into downloadCache itself; fetch its misses directly.
+        OkHttpDataSource.Factory(
+          OkHttpClient.Builder()
+            .dns(
+              object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                  val addresses = Dns.SYSTEM.lookup(hostname)
+                  return when (this@DownloadUtil.ipVersion) {
+                    IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
+                    IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
+                    IpVersion.AUTO -> addresses
                   }
-                )
-                .proxy(YouTube.proxy)
-                .proxyAuthenticator { _, response ->
-                  YouTube.proxyAuth?.let { auth ->
-                    response.request.newBuilder().header("Proxy-Authorization", auth).build()
-                  } ?: response.request
                 }
-                .build(),
+              }
             )
-          )
-          .setCacheWriteDataSinkFactory(null)
-          .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .proxy(YouTube.proxy)
+            .proxyAuthenticator { _, response ->
+              YouTube.proxyAuth?.let { auth ->
+                response.request.newBuilder().header("Proxy-Authorization", auth).build()
+              } ?: response.request
+            }
+            .build(),
+        )
       )
     ) { dataSpec ->
       // If this is a Canvas request (e.g., Apple Music or Tidal), bypass YouTube resolution!
@@ -227,22 +225,32 @@ constructor(
 
       val mediaId = dataSpec.key ?: error("No media id")
 
-      songUrlCache["${mediaId}_${downloadQuality.name}"]
+      // Lock the setting and selected format for the lifetime of this download. In
+      // particular, a later setting change or a newly resolved URL must not splice
+      // a different representation into already-downloaded bytes.
+      val quality = try {
+        sourceRegistry.qualityFor(mediaId, downloadQuality)
+      } catch (error: IOException) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw error
+      }
+      songUrlCache[mediaId]
         ?.takeIf { it.expiresAtMs > System.currentTimeMillis() }
-        ?.let {
-          return@Factory it.resolve(dataSpec)
-        }
+        ?.let { return@Factory it.resolve(dataSpec) }
 
-      val playbackData =
-        runBlocking(Dispatchers.IO) {
-            YTPlayerUtils.playerResponseForPlayback(
-              videoId = mediaId,
-              audioQuality = AudioQuality.AUTO,
-              connectivityManager = connectivityManager
-            )
-          }
-          .getOrThrow()
+      val playbackData = runBlocking(Dispatchers.IO) { resolveDownloadSource(mediaId, quality.resolverQuality()) }
       val format = playbackData.format
+      val source = DownloadSourceIdentity.from(playbackData.streamUrl, format.itag, format.mimeType, format.contentLength)
+      val accepted = try {
+        sourceRegistry.acceptSource(mediaId, source, downloadCache.getCachedSpans(mediaId).isNotEmpty())
+      } catch (error: IOException) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw error
+      }
+      if (!accepted) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw IOException("The unfinished download cannot safely resume with this source")
+      }
 
       database.query {
         upsert(
@@ -251,7 +259,7 @@ constructor(
             itag = format.itag,
             mimeType = format.mimeType.split(";")[0],
             codecs =
-              format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "opus",
+              format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "unknown",
             bitrate = format.bitrate,
             sampleRate = format.audioSampleRate,
             contentLength = format.contentLength ?: 0L,
@@ -353,7 +361,7 @@ constructor(
       }
 
       val stream = ResolvedStream.from(playbackData)
-      songUrlCache["${mediaId}_${downloadQuality.name}"] = stream
+      songUrlCache[mediaId] = stream
       stream.resolve(dataSpec)
     }
 
@@ -408,6 +416,12 @@ constructor(
               val id = download.request.id
               publishJobs.remove(id)?.cancel()
               downloads.update { it - id }
+              songUrlCache.remove(id)
+              try {
+                sourceRegistry.remove(id)
+              } catch (error: IOException) {
+                downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+              }
               sharedDownloadStore.markRemovalPending(id)
               scope.launch {
                 syncDownloadedFlag(id)
@@ -428,6 +442,13 @@ constructor(
       while (cursor.moveToNext()) {
         result[cursor.download.request.id] = cursor.download
       }
+    }
+    // A process can die after Media3 removed a download but before its callback
+    // cleared the identity. Do this before the manager can start new work.
+    try {
+      sourceRegistry.prune(result.keys)
+    } catch (_: IOException) {
+      downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
     }
     downloads.value = result
     refreshSharedDownloads()
