@@ -1,6 +1,8 @@
 package echo.music.iad1tya.playback
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -234,6 +236,30 @@ class StreamingCacheExpiryInstrumentedTest {
     assertFalse(playerCache.getCachedSpans(key).isEmpty())
     engine().clean(now)
     assertTrue(playerCache.getCachedSpans(key).isEmpty())
+  }
+
+  @Test fun ageMetadataFailureDoesNotBreakCacheWritesOrEvictor() {
+    val badContext = object : ContextWrapper(context) {
+      override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
+        object : SharedPreferences by agePreferences {
+          override fun getLong(key: String, defaultValue: Long): Long = throw IllegalStateException("test")
+          override fun contains(key: String): Boolean = throw IllegalStateException("test")
+        }
+    }
+    val directory = File(context.cacheDir, "${prefix}metadata-failure")
+    val badCache = SimpleCache(directory,
+      StreamingCacheEvictor(LeastRecentlyUsedCacheEvictor(1_000_000), StreamingCacheAges(badContext)),
+      provider)
+    try {
+      val key = id("metadata-failure")
+      cacheBytes(badCache, key)
+      assertTrue(badCache.isCached(key, 0, bytes.size.toLong()))
+      badCache.removeResource(key)
+      assertTrue(badCache.getCachedSpans(key).isEmpty())
+    } finally {
+      badCache.release()
+      directory.deleteRecursively()
+    }
   }
 
   @Test fun oldUntrackedCacheAndClockRollbackAreHandled() {

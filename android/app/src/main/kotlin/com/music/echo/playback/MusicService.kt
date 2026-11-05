@@ -443,8 +443,10 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   /** Protect only players in use, not every song heard during the service's lifetime. */
   private fun updateStreamingCacheProtection() {
     val mediaIds = buildSet<String> {
+      // Pin as soon as playback is requested, including the short IDLE-to-buffering
+      // transition before the player has opened its first data source.
       if (::player.isInitialized && player.playWhenReady &&
-        (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+        player.playbackState != Player.STATE_ENDED && player.playerError == null
       ) {
         player.currentMediaItem?.mediaId?.let(::add)
       }
