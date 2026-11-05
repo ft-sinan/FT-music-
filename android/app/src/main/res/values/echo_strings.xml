@@ -1116,4 +1116,5 @@
     <string name="animation_found">Animation found. It will appear when this song plays.</string>
     <string name="animation_found_session">Animation found for this session, but the selection could not be saved.</string>
     <string name="animation_playback_failed">The animation could not play. Showing the still cover instead.</string>
+    <string name="song_cache_expiry_note">Cached songs are removed one hour after they are cached. Downloaded songs are kept.</string>
 </resources>

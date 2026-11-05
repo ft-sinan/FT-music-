@@ -154,6 +154,32 @@ class ForkConfigurationTest(unittest.TestCase):
             exclusions = {el.get("path") for el in modern.findall(f"{section}/exclude") if el.get("domain") == "sharedpref"}
             self.assertTrue(expected <= exclusions, section)
 
+    def test_temporary_cache_expires_after_one_hour_but_downloads_do_not(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        expiry = (playback / "StreamingCacheExpiry.kt").read_text()
+        guard = (playback / "StreamingCacheGuard.kt").read_text()
+        module = " ".join((MAIN / "kotlin/com/music/echo/di/AppModule.kt").read_text().split())
+        service = " ".join((playback / "MusicService.kt").read_text().split())
+        settings = (MAIN / "kotlin/com/music/echo/ui/screens/settings/StorageSettings.kt").read_text()
+        self.assertIn("STREAMING_CACHE_LIFETIME_MS = 60 * 60 * 1000L", expiry)
+        self.assertIn("@PlayerCache private val cache: SimpleCache", expiry)
+        # Expiry must never be handed the download cache.
+        self.assertNotIn("DownloadCache", expiry + guard)
+        self.assertIn("StreamingCacheEvictor(sizeEvictor, ages)", module)
+        self.assertIn('resolve("download"), NoOpCacheEvictor(), databaseProvider', module)
+        # Only the temporary player-cache data source is guarded by expiry.
+        self.assertEqual(service.count("GuardedStreamingDataSource("), 1)
+        self.assertIn("val temporaryCacheFactory = CacheDataSource.Factory() .setCache(playerCache)", service)
+        self.assertIn(
+            "GuardedStreamingDataSource( temporaryCacheFactory.createDataSource(), "
+            "streamingCacheGuard, streamingCacheExpiry, )",
+            service,
+        )
+        self.assertIn("R.string.song_cache_expiry_note", settings)
+        note = ET.parse(MAIN / "res/values/echo_strings.xml").find("string[@name='song_cache_expiry_note']")
+        self.assertIn("one hour", note.text)
+        self.assertIn("Downloaded songs are kept", note.text)
+
     def test_removed_beat_matching_keeps_crossfade_and_radio_queue(self):
         service = (MAIN / "kotlin/com/music/echo/playback/MusicService.kt").read_text()
         player = (MAIN / "kotlin/com/music/echo/ui/player/Player.kt").read_text()
