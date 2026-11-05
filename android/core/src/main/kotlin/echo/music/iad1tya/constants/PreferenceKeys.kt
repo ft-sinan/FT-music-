@@ -150,7 +150,18 @@ enum class AudioQuality(
 val DownloadQualityKey = stringPreferencesKey("downloadQuality")
 
 enum class DownloadQuality {
+  // Retained so an existing preference from earlier FT Music releases still means High.
   YOUTUBE,
+  HIGH,
+  DATA_SAVER;
+
+  fun canonical(): DownloadQuality = if (this == YOUTUBE) HIGH else this
+
+  /** InnerTubeX distinguishes HIGH from LOW; it does not promise a specific bitrate or codec. */
+  fun resolverQuality(): AudioQuality = when (canonical()) {
+    DATA_SAVER -> AudioQuality.LOW
+    HIGH, YOUTUBE -> AudioQuality.HIGH
+  }
 }
 
 val DownloadOnWifiOnlyKey = booleanPreferencesKey("downloadOnWifiOnly")

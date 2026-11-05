@@ -48,6 +48,8 @@ import echo.music.iad1tya.constants.CrossfadeEnabledKey
 import echo.music.iad1tya.constants.CrossfadeGaplessKey
 import echo.music.iad1tya.constants.DisableLoadMoreWhenRepeatAllKey
 import echo.music.iad1tya.constants.DownloadOnWifiOnlyKey
+import echo.music.iad1tya.constants.DownloadQuality
+import echo.music.iad1tya.constants.DownloadQualityKey
 import echo.music.iad1tya.constants.DownloadWithMetadataKey
 import echo.music.iad1tya.constants.EnableBitPerfectUsbDacKey
 import echo.music.iad1tya.constants.EnableExportAsMp3Key
@@ -209,8 +211,8 @@ fun PlayerSettings(
 
   val (downloadQuality, onDownloadQualityChange) =
     rememberEnumPreference(
-      echo.music.iad1tya.constants.DownloadQualityKey,
-      defaultValue = echo.music.iad1tya.constants.DownloadQuality.YOUTUBE
+      DownloadQualityKey,
+      defaultValue = DownloadQuality.HIGH
     )
 
   if (showAudioQualityWifiDialog) {
@@ -261,13 +263,13 @@ fun PlayerSettings(
         showDownloadQualityDialog = false
       },
       title = stringResource(R.string.download_quality_title),
-      current = downloadQuality,
-      values = listOf(echo.music.iad1tya.constants.DownloadQuality.YOUTUBE),
+      current = downloadQuality.canonical(),
+      values = listOf(DownloadQuality.HIGH, DownloadQuality.DATA_SAVER),
       valueText = {
-        when (it) {
-          echo.music.iad1tya.constants.DownloadQuality.YOUTUBE -> "YouTube Music (AAC/Default)"
-          else -> ""
-        }
+        stringResource(if (it == DownloadQuality.DATA_SAVER) R.string.ft_download_quality_saver else R.string.ft_download_quality_high)
+      },
+      valueDescription = {
+        stringResource(if (it == DownloadQuality.DATA_SAVER) R.string.ft_download_quality_saver_desc else R.string.ft_download_quality_high_desc)
       }
     )
   }
@@ -463,13 +465,11 @@ fun PlayerSettings(
               icon = painterResource(R.drawable.download),
               title = { Text(stringResource(R.string.download_quality_title)) },
               description = {
-                Text(
-                  when (downloadQuality) {
-                    echo.music.iad1tya.constants.DownloadQuality.YOUTUBE ->
-                      "YouTube Music (AAC/Default)"
-                    else -> "YouTube Music (AAC/Default)"
-                  }
+                val label = stringResource(
+                  if (downloadQuality.canonical() == DownloadQuality.DATA_SAVER) R.string.ft_download_quality_saver
+                  else R.string.ft_download_quality_high
                 )
+                Text("$label · ${stringResource(R.string.ft_download_quality_applies)}")
               },
               onClick = { showDownloadQualityDialog = true }
             )

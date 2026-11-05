@@ -21,6 +21,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.di.DownloadCache
 import java.io.File
+import java.io.IOException
 import java.io.FileDescriptor
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
@@ -44,6 +45,7 @@ class SharedDownloadStore @Inject constructor(
   @DownloadCache private val cache: SimpleCache,
   private val database: MusicDatabase,
   private val activePlayback: ActivePlaybackTracker,
+  private val sourceRegistry: DownloadSourceRegistry,
 ) {
   enum class FileState { PRESENT, MISSING, UNKNOWN }
   enum class PublishResult { PUBLISHED, ALREADY_PRESENT, NEEDS_PERMISSION, UNAVAILABLE }
@@ -159,16 +161,24 @@ class SharedDownloadStore @Inject constructor(
       if (hasRecord(id)) return@withLock PublishResult.ALREADY_PRESENT
       if (requiresLegacyPermission()) return@withLock PublishResult.NEEDS_PERMISSION
       if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) return@withLock PublishResult.UNAVAILABLE
-      val format = database.format(id).firstOrNull() ?: return@withLock PublishResult.UNAVAILABLE
-      val ext = SharedDownloadNames.extension(format.mimeType) ?: return@withLock PublishResult.UNAVAILABLE
+      // Playback can overwrite the database format for the same song while a download
+      // is running. New downloads have their own immutable source metadata. Older
+      // completed downloads have no source record, so retain the existing fallback.
+      val source = try { sourceRegistry.sourceFor(id) } catch (_: IOException) { return@withLock PublishResult.UNAVAILABLE }
+      if (source == null && sourceRegistry.hasRecord(id)) return@withLock PublishResult.UNAVAILABLE
+      val format = if (source == null) database.format(id).firstOrNull() else null
+      val mime = source?.mimeType ?: format?.mimeType ?: return@withLock PublishResult.UNAVAILABLE
+      val ext = SharedDownloadNames.extension(mime) ?: return@withLock PublishResult.UNAVAILABLE
       val song = database.song(id).firstOrNull()
       val title = song?.title ?: String(download.request.data, Charsets.UTF_8)
       val artist = song?.artists?.joinToString(", ") { it.name }.orEmpty()
       val name = SharedDownloadNames.fileName(id, title, artist, ext)
       val knownLength = download.contentLength.takeIf { it > 0 }
         ?: ContentMetadata.getContentLength(cache.getContentMetadata(id)).takeIf { it > 0 && it != C.LENGTH_UNSET.toLong() }
-        ?: format.contentLength.takeIf { it > 0 }
+        ?: source?.length?.takeIf { it > 0 }
+        ?: format?.contentLength?.takeIf { it > 0 }
         ?: return@withLock PublishResult.UNAVAILABLE
+      if (source?.length != null && source.length != knownLength) return@withLock PublishResult.UNAVAILABLE
       val spans = cache.getCachedSpans(id).sortedBy { it.position }
       var position = 0L
       for (span in spans) {
@@ -180,9 +190,9 @@ class SharedDownloadStore @Inject constructor(
       var published: Published? = null
       try {
         published = if (Build.VERSION.SDK_INT >= 29) {
-          publishMediaStore(name, format.mimeType, spans.map { it.file!! }, knownLength)
+          publishMediaStore(name, mime, spans.map { it.file!! }, knownLength)
         } else {
-          publishLegacy(name, format.mimeType, spans.map { it.file!! }, knownLength)
+          publishLegacy(name, mime, spans.map { it.file!! }, knownLength)
         }
         // Persist the association before discarding a single private cache byte.
         check(preferences.edit().putString(id, requireNotNull(published).encode()).commit())

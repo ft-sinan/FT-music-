@@ -96,9 +96,10 @@ class ForkConfigurationTest(unittest.TestCase):
 
     def test_device_specific_download_mappings_are_never_backed_up(self):
         store = (MAIN / "kotlin/com/music/echo/playback/SharedDownloadStore.kt").read_text()
-        names = {"ft_shared_downloads", "ft_shared_pending_removals"}
+        registry = (MAIN / "kotlin/com/music/echo/playback/DownloadSourceRegistry.kt").read_text()
+        names = {"ft_shared_downloads", "ft_shared_pending_removals", "ft_download_sources"}
         for name in names:
-            self.assertIn(f'getSharedPreferences("{name}"', store)
+            self.assertIn(f'getSharedPreferences("{name}"', store + registry)
         expected = {f"{name}.xml" for name in names}
         legacy = ET.parse(MAIN / "res/xml/backup_rules.xml").getroot()
         self.assertTrue(expected <= {el.get("path") for el in legacy.findall("exclude") if el.get("domain") == "sharedpref"})

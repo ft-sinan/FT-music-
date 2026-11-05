@@ -244,7 +244,8 @@ object YTPlayerUtils {
         requireM4a = false
       ) ?: throw Exception("No stream found via InnerTubeXResolver")
 
-    val realBitrate = extracted.bitrate ?: (extracted.kbps * 1000)
+    // Unknown source metadata must not be reported as a made-up format or sample rate.
+    val realBitrate = extracted.bitrate?.takeIf { it > 0 } ?: 0
 
     PlaybackData(
       audioConfig =
@@ -256,21 +257,21 @@ object YTPlayerUtils {
       playbackTracking = null,
       format =
         com.music.innertube.models.response.PlayerResponse.StreamingData.Format(
-          itag = if (extracted.itag > 0) extracted.itag else 251,
+          itag = extracted.itag.takeIf { it > 0 } ?: 0,
           url = extracted.url,
           mimeType = extracted.mimeType,
           bitrate = realBitrate,
           width = null,
           height = null,
           contentLength = extracted.contentLength,
-          quality = if (extracted.kbps >= 240) "high" else "medium",
+          quality = if (realBitrate <= 0) "unknown" else if (extracted.kbps >= 240) "high" else "medium",
           fps = null,
           qualityLabel = null,
-          averageBitrate = realBitrate,
-          audioQuality = if (extracted.kbps >= 240) "AUDIO_QUALITY_HIGH" else "AUDIO_QUALITY_MEDIUM",
+          averageBitrate = realBitrate.takeIf { it > 0 },
+          audioQuality = if (realBitrate <= 0) null else if (extracted.kbps >= 240) "AUDIO_QUALITY_HIGH" else "AUDIO_QUALITY_MEDIUM",
           approxDurationMs = null,
-          audioSampleRate = extracted.sampleRate ?: 48000,
-          audioChannels = 2,
+          audioSampleRate = extracted.sampleRate?.takeIf { it > 0 },
+          audioChannels = null,
           loudnessDb = extracted.loudnessDb,
           lastModified = null,
           signatureCipher = null,

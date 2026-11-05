@@ -604,6 +604,23 @@ fun YouTubeSongMenu(
       )
     }
 
+    // A failed partial can be retried normally, or explicitly removed when its
+    // old source cannot be safely resumed after an update or format change.
+    if (download?.state == Download.STATE_FAILED) {
+      item { Spacer(modifier = Modifier.height(12.dp)) }
+      item {
+        Material3MenuGroup(
+          items = listOf(
+            Material3MenuItemData(
+              title = { Text(stringResource(R.string.ft_remove_failed_download)) },
+              icon = { Icon(painter = painterResource(R.drawable.delete), contentDescription = null) },
+              onClick = { DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, song.id, false) }
+            )
+          )
+        )
+      }
+    }
+
     if (enableExportAsMp3) {
       item { Spacer(modifier = Modifier.height(12.dp)) }
       item {

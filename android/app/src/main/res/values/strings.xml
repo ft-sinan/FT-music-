@@ -990,4 +990,11 @@
     <!-- Theme & UI -->
     <string name="theme_mode_monochrome">Monochrome</string>
     <string name="theme_mode_monochrome_desc">Pure neutral grayscale with high contrast</string>
+    <string name="ft_download_quality_high">High</string>
+    <string name="ft_download_quality_high_desc">Prefers the best available source audio. The actual bitrate and codec depend on the source.</string>
+    <string name="ft_download_quality_saver">Data saver</string>
+    <string name="ft_download_quality_saver_desc">Prefers a smaller source stream when available.</string>
+    <string name="ft_download_quality_applies">Applies when a download starts. Existing downloads stay as they are.</string>
+    <string name="ft_download_restart_needed">This unfinished download cannot safely resume. In the song menu, remove the failed download, then download it again.</string>
+    <string name="ft_remove_failed_download">Remove failed download</string>
 </resources>
