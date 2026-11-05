@@ -39,6 +39,7 @@ fun CanvasArtworkPlayer(
   fallbackUrl: String?,
   isPlaying: Boolean,
   modifier: Modifier = Modifier,
+  fitWideArtwork: Boolean = false,
 ) {
   val context = LocalContext.current
   val primary = primaryUrl?.takeIf { it.isNotBlank() }
@@ -142,9 +143,10 @@ fun CanvasArtworkPlayer(
               primary -> fallback
               else -> null
             }
-          if (!next.isNullOrBlank()) {
+          // Reveal the still image on every failure, including the final fallback.
+          isVideoReady = false
+          if (!next.isNullOrBlank() && next != currentUrl) {
             currentUrl = next
-            isVideoReady = false
           }
         }
 
@@ -219,7 +221,12 @@ fun CanvasArtworkPlayer(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
       }
     },
-    update = { view -> view.setAspectRatio(videoAspectRatio) },
+    update = { view ->
+      val fit = fitWideArtwork && videoAspectRatio in 1.72f..1.84f
+      view.resizeMode = if (fit) AspectRatioFrameLayout.RESIZE_MODE_FIT else AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+      exoPlayer.videoScalingMode = if (fit) C.VIDEO_SCALING_MODE_SCALE_TO_FIT else C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+      view.setAspectRatio(videoAspectRatio)
+    },
     modifier = modifier.alpha(alpha),
   )
 }

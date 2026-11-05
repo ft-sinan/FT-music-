@@ -39,12 +39,24 @@ def labels(tree):
 def wait_for(label, timeout=120):
     end = time.monotonic() + timeout
     last = []
+    launcher_recoveries = 0
     while time.monotonic() < end:
         try:
             tree = dump()
             last = labels(tree)
             if label in last:
                 return tree
+            # The emulator's launcher can ANR after instrumentation. Dismiss only its
+            # own dialog and reopen FT; never dismiss an FT Music crash/ANR dialog.
+            if "Pixel Launcher isn't responding" in last and launcher_recoveries < 2:
+                close = next((node for node in tree.iter("node")
+                              if "Close app" in (node.get("text", ""), node.get("content-desc", ""))), None)
+                bounds = [int(n) for n in re.findall(r"\d+", close.get("bounds", ""))] if close is not None else []
+                if len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+                    print("Recovering from emulator Pixel Launcher ANR", flush=True)
+                    adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+                    adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity", check=False)
+                    launcher_recoveries += 1
         except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
             pass
         time.sleep(1)

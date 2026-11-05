@@ -1,6 +1,5 @@
 package echo.music.iad1tya.ui.menu
 
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -83,6 +82,7 @@ import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.HeartBurstIcon
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalAudioDeletion
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
@@ -93,7 +93,6 @@ import echo.music.iad1tya.ui.component.SongListItem
 import echo.music.iad1tya.ui.component.TextFieldDialog
 import echo.music.iad1tya.ui.utils.ShowMediaInfo
 import echo.music.iad1tya.utils.rememberPreference
-import echo.music.iad1tya.utils.shareLocalAudio
 import echo.music.iad1tya.viewmodels.CachePlaylistViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -114,6 +113,13 @@ fun SongMenu(
   val playerConnection = LocalPlayerConnection.current ?: return
   val songState = database.song(originalSong.id).collectAsState(initial = originalSong)
   val song = songState.value ?: originalSong
+  var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
+  if (showShareDialog) {
+    SongShareDialog(mediaId = song.id, mimeHint = song.format?.mimeType, onDismiss = {
+      showShareDialog = false
+      onDismiss()
+    })
+  }
   val download by
     LocalDownloadUtil.current.getDownload(originalSong.id).collectAsState(initial = null)
   val coroutineScope = rememberCoroutineScope()
@@ -430,18 +436,7 @@ fun SongMenu(
               },
               text = stringResource(R.string.share),
               onClick = {
-                onDismiss()
-                if (song.song.isLocal) {
-                  shareLocalAudio(context, song.id, song.format?.mimeType)
-                } else {
-                  val intent =
-                    Intent().apply {
-                      action = Intent.ACTION_SEND
-                      type = "text/plain"
-                      putExtra(Intent.EXTRA_TEXT, "https://share.echomusic.fun/watch?v=${song.id}")
-                    }
-                  context.startActivity(Intent.createChooser(intent, null))
-                }
+                showShareDialog = true
               }
             )
           ),

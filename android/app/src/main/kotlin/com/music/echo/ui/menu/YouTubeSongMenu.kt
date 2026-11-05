@@ -1,7 +1,6 @@
 package echo.music.iad1tya.ui.menu
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -75,6 +74,7 @@ import echo.music.iad1tya.models.toSongEntity
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
 import echo.music.iad1tya.ui.component.Material3MenuItemData
@@ -100,6 +100,13 @@ fun YouTubeSongMenu(
   showSongHeader: Boolean = true,
 ) {
   val context = LocalContext.current
+  var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
+  if (showShareDialog) {
+    SongShareDialog(mediaId = song.id, onDismiss = {
+      showShareDialog = false
+      onDismiss()
+    })
+  }
   val database = LocalDatabase.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val librarySong by database.song(song.id).collectAsState(initial = null)
@@ -352,14 +359,7 @@ fun YouTubeSongMenu(
               },
               text = stringResource(R.string.share),
               onClick = {
-                val intent =
-                  Intent().apply {
-                    action = Intent.ACTION_SEND
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, song.shareLink)
-                  }
-                context.startActivity(Intent.createChooser(intent, null))
-                onDismiss()
+                showShareDialog = true
               }
             )
           ),

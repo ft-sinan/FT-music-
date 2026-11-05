@@ -190,6 +190,7 @@ class SharedDownloadStoreInstrumentedTest {
     assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
     val uri = store.recordedUri(id)!!
     assertEquals(SharedDownloadStore.FileState.PRESENT, store.state(id))
+    assertEquals(uri, store.verifiedUriForSharing(id))
     assertArrayEquals(bytes, read(uri))
     val metadata = MediaMetadataRetriever()
     try {
@@ -417,6 +418,7 @@ class SharedDownloadStoreInstrumentedTest {
     val edited = bytes.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 1).toByte() }
     context.contentResolver.openOutputStream(uri, "w")!!.use { it.write(edited) }
     try {
+      assertEquals(null, store.verifiedUriForSharing(id))
       store.delete(id)
       assertArrayEquals(edited, read(uri))
     } finally {

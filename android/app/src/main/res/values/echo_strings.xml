@@ -1087,4 +1087,25 @@
     <string name="legacy_icon">Legacy Icon</string>
     <string name="legacy_icon_desc">Revert the app icon back to the original legacy design</string>
     <string name="clear_queue_confirm">Are you sure you want to clear upcoming songs from the queue?</string>
+    <string name="widget_lyrics_name">FT Lyrics Player</string>
+    <string name="widget_lyrics_description">A glass-style player with current lyrics and playback controls</string>
+    <string name="widget_ft_compact_name">FT Compact Player</string>
+    <string name="widget_ft_compact_description">A compact player with artwork and playback controls</string>
+    <string name="widget_open_ft_music">Open FT Music</string>
+    <string name="widget_lyrics_label">LYRICS</string>
+    <string name="widget_lyrics_synced">SYNCED LYRICS</string>
+    <string name="widget_lyrics_unsynced">Synced lyrics unavailable</string>
+    <string name="widget_lyrics_unavailable">Synced lyrics unavailable</string>
+    <string name="widget_lyrics_loading">Finding lyrics…</string>
+    <string name="widget_lyrics_begin_soon">Lyrics begin soon</string>
+    <string name="widget_lyrics_instrumental">♪</string>
+    <string name="share_song_title">Share song</string>
+    <string name="share_file">Share file</string>
+    <string name="share_link">Share YouTube Music link</string>
+    <string name="share_open_link">Open link with…</string>
+    <string name="share_file_checking">Checking for an accessible audio file…</string>
+    <string name="share_file_available">An accessible audio file was found.</string>
+    <string name="share_file_not_available">No accessible audio file was found. Partial caches cannot be shared.</string>
+    <string name="share_no_youtube_link">This song has no YouTube Music link.</string>
+    <string name="share_unavailable">No compatible app is available.</string>
 </resources>

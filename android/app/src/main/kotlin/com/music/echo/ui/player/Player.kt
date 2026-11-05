@@ -11,9 +11,6 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.view.TextureView
-import android.view.ViewGroup
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -142,7 +139,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -150,16 +146,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.Player.STATE_ENDED
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.navigation.NavController
 import androidx.palette.graphics.Palette
 import coil3.compose.AsyncImage
@@ -341,7 +332,7 @@ fun BottomSheetPlayer(
 
   val dataSaverEnabled by
     rememberPreference(key = echo.music.iad1tya.constants.DataSaverEnabledKey, defaultValue = false)
-  val enableCanvasPref by rememberPreference(CanvasThumbnailAnimationKey, true)
+  val enableCanvasPref by rememberPreference(CanvasThumbnailAnimationKey, false)
   val enableCanvas = if (dataSaverEnabled) false else enableCanvasPref
 
   val shouldUseDarkButtonColors =
@@ -659,9 +650,9 @@ fun BottomSheetPlayer(
     )
 
   var canvasArtwork by remember(mediaMetadata?.id) { mutableStateOf<CanvasArtwork?>(null) }
-  var canvasFetchInFlight by remember(mediaMetadata?.id) { mutableStateOf(false) }
 
-  LaunchedEffect(mediaMetadata?.id, playerBackground) {
+  // Restart the lookup when the animation or Data Saver setting changes.
+  LaunchedEffect(mediaMetadata?.id, playerBackground, enableCanvas) {
     if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC || !enableCanvas) {
       canvasArtwork = null
       return@LaunchedEffect
@@ -684,9 +675,6 @@ fun BottomSheetPlayer(
     } catch (e: Exception) {
       e.printStackTrace()
     }
-
-    if (canvasFetchInFlight) return@LaunchedEffect
-    canvasFetchInFlight = true
 
     withContext(Dispatchers.IO) {
       val storefront =
@@ -728,7 +716,6 @@ fun BottomSheetPlayer(
         if (validated != null) {
           CanvasArtworkPlaybackCache.put(item.id, validated)
         }
-        canvasFetchInFlight = false
       }
     }
   }
@@ -1220,6 +1207,7 @@ fun BottomSheetPlayer(
               label = "appleMusicBackground"
             ) { thumbnailUrl ->
               if (thumbnailUrl != null) {
+                var wideArtwork by remember(thumbnailUrl) { mutableStateOf(false) }
                 Box(
                   modifier =
                     Modifier.fillMaxSize().graphicsLayer { alpha = backgroundAlphaProvider() }
@@ -1252,19 +1240,21 @@ fun BottomSheetPlayer(
                         .drawWithContent {
                           drawContent()
 
-                          drawRect(
-                            brush =
-                              Brush.verticalGradient(
-                                colorStops =
-                                  arrayOf(
-                                    0.00f to Color.Black,
-                                    0.75f to Color.Black,
-                                    0.92f to Color.Black.copy(alpha = 0.4f),
-                                    1.00f to Color.Transparent,
-                                  )
-                              ),
-                            blendMode = BlendMode.DstIn
-                          )
+                          if (!wideArtwork) {
+                            drawRect(
+                              brush =
+                                Brush.verticalGradient(
+                                  colorStops =
+                                    arrayOf(
+                                      0.00f to Color.Black,
+                                      0.75f to Color.Black,
+                                      0.92f to Color.Black.copy(alpha = 0.4f),
+                                      1.00f to Color.Transparent,
+                                    )
+                                ),
+                              blendMode = BlendMode.DstIn
+                            )
+                          }
                         }
                   ) {
                     AsyncImage(
@@ -1274,14 +1264,20 @@ fun BottomSheetPlayer(
                           .size(CoilSize.ORIGINAL)
                           .build(),
                       contentDescription = null,
-                      contentScale = ContentScale.Crop,
+                      onSuccess = { state ->
+                        val image = state.result.image
+                        wideArtwork = isSixteenByNine(image.width, image.height)
+                      },
+                      contentScale = if (wideArtwork) ContentScale.Fit else ContentScale.Crop,
                       modifier = Modifier.fillMaxSize()
                     )
 
                     if (enableCanvas && canvasArtwork != null && showCanvas) {
-                      BackgroundVideoView(
-                        videoUrl = canvasArtwork?.animated ?: canvasArtwork?.videoUrl ?: "",
+                      CanvasArtworkPlayer(
+                        primaryUrl = canvasArtwork?.animated,
+                        fallbackUrl = canvasArtwork?.videoUrl,
                         isPlaying = isPlaying,
+                        fitWideArtwork = true,
                         modifier = Modifier.fillMaxSize()
                       )
                     }
@@ -3099,105 +3095,4 @@ private fun PlayerMoreMenuButton(
       colorFilter = ColorFilter.tint(iconButtonColor),
     )
   }
-}
-
-@Composable
-private fun BackgroundVideoView(
-  videoUrl: String,
-  isPlaying: Boolean,
-  modifier: Modifier = Modifier
-) {
-  val context = LocalContext.current
-  var isVideoReady by remember(videoUrl) { mutableStateOf(false) }
-
-  val trackSelector = remember {
-    DefaultTrackSelector(context).apply {
-      parameters =
-        buildUponParameters()
-          .setMaxVideoSize(4096, 4096)
-          .setForceHighestSupportedBitrate(true)
-          .build()
-    }
-  }
-
-  val exoPlayer = remember {
-    ExoPlayer.Builder(context)
-      .setTrackSelector(trackSelector)
-      .setLoadControl(DefaultLoadControl.Builder().setTargetBufferBytes(20 * 1024 * 1024).build())
-      .build()
-      .apply {
-        repeatMode = Player.REPEAT_MODE_ONE
-        volume = 0f
-        videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-        playWhenReady = isPlaying
-      }
-  }
-
-  val aspectRatioFrameLayout = remember {
-    AspectRatioFrameLayout(context).apply {
-      resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-      setBackgroundColor(android.graphics.Color.TRANSPARENT)
-    }
-  }
-
-  DisposableEffect(exoPlayer) {
-    val listener =
-      object : Player.Listener {
-        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-          if (videoSize.width > 0 && videoSize.height > 0) {
-            aspectRatioFrameLayout.setAspectRatio(videoSize.width.toFloat() / videoSize.height)
-          }
-        }
-
-        override fun onRenderedFirstFrame() {
-          isVideoReady = true
-        }
-      }
-    exoPlayer.addListener(listener)
-    onDispose { exoPlayer.removeListener(listener) }
-  }
-
-  LaunchedEffect(videoUrl) {
-    isVideoReady = false
-    val mediaItem =
-      MediaItem.Builder()
-        .setUri(videoUrl)
-        .setMimeType(
-          if (videoUrl.contains("m3u8")) MimeTypes.APPLICATION_M3U8 else MimeTypes.VIDEO_MP4
-        )
-        .build()
-    exoPlayer.setMediaItem(mediaItem)
-    exoPlayer.prepare()
-  }
-
-  LaunchedEffect(isPlaying) { exoPlayer.playWhenReady = isPlaying }
-
-  DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
-
-  val alpha by
-    animateFloatAsState(
-      targetValue = if (isVideoReady) 1f else 0f,
-      animationSpec = tween(800),
-      label = "videoAlpha"
-    )
-
-  AndroidView(
-    factory = { _ ->
-      aspectRatioFrameLayout.apply {
-        isEnabled = false
-        isClickable = false
-        isFocusable = false
-
-        if (childCount == 0) {
-          val textureView =
-            TextureView(context).apply {
-              layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-            }
-          addView(textureView)
-          exoPlayer.setVideoTextureView(textureView)
-        }
-      }
-    },
-    modifier = modifier.alpha(alpha)
-  )
 }

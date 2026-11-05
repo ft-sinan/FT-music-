@@ -1704,6 +1704,9 @@ interface DatabaseDao {
 
   @Upsert fun upsert(lyrics: LyricsEntity)
 
+  // A background widget lookup must never replace lyrics the user has edited.
+  @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertLyricsIfAbsent(lyrics: LyricsEntity)
+
   @Upsert fun upsert(format: FormatEntity)
 
   @Query("DELETE FROM format WHERE id = :id") fun deleteFormat(id: String)

@@ -177,6 +177,7 @@ import echo.music.iad1tya.utils.reportException
 import echo.music.iad1tya.widget.EchoMusicWidgetManager
 import echo.music.iad1tya.widget.MusicWidgetReceiver
 import echo.music.iad1tya.widget.WidgetQueueItem
+import echo.music.iad1tya.widget.WidgetLyrics
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.net.Inet4Address
@@ -200,6 +201,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
@@ -909,7 +911,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         ) {
           val lyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
           database.query {
-            upsert(
+            insertLyricsIfAbsent(
               LyricsEntity(
                 id = mediaMetadata.id,
                 lyrics = lyricsWithProvider.lyrics ?: "",
@@ -4253,60 +4255,138 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     return super.onStartCommand(intent, flags, startId)
   }
 
-  private fun updateWidgetUI(isPlaying: Boolean) {
-    scope.launch {
+  private var widgetLyricsJob: Job? = null
+  private var widgetLyricsSongId: String? = null
+  private var widgetLyrics: WidgetLyrics = WidgetLyrics.Unavailable
+
+  /** Observe/fetch only while a lyrics widget is installed; never replace edited lyrics. */
+  private fun watchWidgetLyrics(metadata: echo.music.iad1tya.models.MediaMetadata?) {
+    if (metadata == null || !widgetManager.hasLyricsWidget()) {
+      widgetLyricsJob?.cancel()
+      widgetLyricsJob = null
+      widgetLyricsSongId = null
+      widgetLyrics = WidgetLyrics.Unavailable
+      return
+    }
+    if (widgetLyricsSongId == metadata.id) return
+
+    widgetLyricsJob?.cancel()
+    widgetLyricsSongId = metadata.id
+    widgetLyrics = WidgetLyrics.Loading
+    widgetLyricsJob = scope.launch {
       try {
-        val songData = currentSong.value
-        val song = songData?.song
-        val songTitle = song?.title ?: getString(R.string.no_song_playing)
-        val artistName =
-          songData?.artists?.joinToString(", ") { it.name } ?: getString(R.string.tap_to_open)
-        val isLiked = songData?.song?.liked == true
-
-        val queueItems = mutableListOf<WidgetQueueItem>()
-        if (::player.isInitialized && player.mediaItemCount > 0) {
-          val currentIndex = player.currentMediaItemIndex
-          val timeline = player.currentTimeline
-          val visited = mutableSetOf<Int>()
-          if (!timeline.isEmpty) {
-            val repeatForQueue = if (player.repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
-            var nextIdx = timeline.getNextWindowIndex(currentIndex, repeatForQueue, player.shuffleModeEnabled)
-            while (nextIdx != C.INDEX_UNSET && nextIdx != currentIndex && nextIdx !in visited && queueItems.size < 50) {
-              visited.add(nextIdx)
-              val mediaItem = player.getMediaItemAt(nextIdx)
-              val title = mediaItem.mediaMetadata.title?.toString() ?: "Track ${nextIdx + 1}"
-              val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
-              queueItems.add(WidgetQueueItem(nextIdx, title, artist, false))
-              nextIdx = timeline.getNextWindowIndex(nextIdx, repeatForQueue, player.shuffleModeEnabled)
+        combine(
+          database.lyrics(metadata.id),
+          dataStore.data.map { it[echo.music.iad1tya.constants.DataSaverEnabledKey] ?: false }
+            .distinctUntilChanged(),
+        ) { row, dataSaver -> row to dataSaver }
+          .collectLatest { (row, dataSaver) ->
+            widgetLyrics = when {
+              row != null -> withContext(Dispatchers.Default) { WidgetLyrics.parse(row.lyrics) }
+              dataSaver -> WidgetLyrics.Unavailable
+              else -> WidgetLyrics.Loading
+            }
+            updateWidgetUI(player.isPlaying)
+            if (row == null && !dataSaver) {
+              val result = lyricsHelper.getLyrics(metadata)
+              val text = result.lyrics
+              if (currentMediaMetadata.value?.id == metadata.id) {
+                if (!text.isNullOrBlank() && text != LyricsEntity.LYRICS_NOT_FOUND) {
+                  // IGNORE avoids clobbering a user edit or another fetch that won the race.
+                  database.query { insertLyricsIfAbsent(LyricsEntity(metadata.id, text, result.providerName)) }
+                } else {
+                  widgetLyrics = WidgetLyrics.Unavailable
+                  updateWidgetUI(player.isPlaying)
+                }
+              }
             }
           }
-          if (queueItems.isEmpty() && player.mediaItemCount > 1) {
-            val count = player.mediaItemCount
-            val upcomingCount = minOf(50, count - 1)
-            for (i in 1..upcomingCount) {
-              val itemIndex = (currentIndex + i) % count
-              val mediaItem = player.getMediaItemAt(itemIndex)
-              val title = mediaItem.mediaMetadata.title?.toString() ?: "Track ${itemIndex + 1}"
-              val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
-              queueItems.add(WidgetQueueItem(itemIndex, title, artist, false))
-            }
-          }
+      } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+      } catch (error: Exception) {
+        Timber.tag(TAG).w(error, "Lyrics widget lookup failed")
+        if (currentMediaMetadata.value?.id == metadata.id) {
+          widgetLyrics = WidgetLyrics.Unavailable
+          updateWidgetUI(player.isPlaying)
         }
+      }
+    }
+  }
 
-        widgetManager.updateWidgets(
-          title = songTitle,
-          artist = artistName,
-          artworkUri = song?.thumbnailUrl,
-          isPlaying = isPlaying,
-          isLiked = isLiked,
-          duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
-          currentPosition = player.currentPosition,
-          isShuffle = if (::player.isInitialized) player.shuffleModeEnabled else false,
-          repeatMode = if (::player.isInitialized) player.repeatMode else Player.REPEAT_MODE_OFF,
-          isMuted = isMuted.value,
-          queueItems = queueItems
-        )
-      } catch (e: Exception) {}
+  private var widgetUiJob: Job? = null
+  private var pendingWidgetPlaying: Boolean? = null
+
+  private fun updateWidgetUI(isPlaying: Boolean) {
+    // Coalesce ticks rather than repeatedly cancelling a slow artwork request.
+    pendingWidgetPlaying = isPlaying
+    if (widgetUiJob?.isActive == true) return
+    widgetUiJob = scope.launch {
+      while (isActive && pendingWidgetPlaying != null) {
+        val playing = pendingWidgetPlaying ?: break
+        pendingWidgetPlaying = null
+        try {
+          val metadata = currentMediaMetadata.value
+          watchWidgetLyrics(metadata)
+          // Do not render a previous database row after the player has changed tracks.
+          val songData = currentSong.value?.takeIf { it.song.id == metadata?.id }
+          val song = songData?.song
+          val songTitle = song?.title ?: metadata?.title ?: getString(R.string.no_song_playing)
+          val artistName = songData?.artists?.joinToString(", ") { it.name }?.takeIf { it.isNotBlank() }
+            ?: metadata?.artists?.joinToString(", ") { it.name }?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.tap_to_open)
+          val isLiked = song?.liked == true
+
+          val queueItems = mutableListOf<WidgetQueueItem>()
+          if (::player.isInitialized && player.mediaItemCount > 0) {
+            val currentIndex = player.currentMediaItemIndex
+            val timeline = player.currentTimeline
+            val visited = mutableSetOf<Int>()
+            if (!timeline.isEmpty) {
+              val repeatForQueue = if (player.repeatMode == Player.REPEAT_MODE_ALL) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+              var nextIdx = timeline.getNextWindowIndex(currentIndex, repeatForQueue, player.shuffleModeEnabled)
+              while (nextIdx != C.INDEX_UNSET && nextIdx != currentIndex && nextIdx !in visited && queueItems.size < 50) {
+                visited.add(nextIdx)
+                val mediaItem = player.getMediaItemAt(nextIdx)
+                val title = mediaItem.mediaMetadata.title?.toString() ?: "Track ${nextIdx + 1}"
+                val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
+                queueItems.add(WidgetQueueItem(nextIdx, title, artist, false))
+                nextIdx = timeline.getNextWindowIndex(nextIdx, repeatForQueue, player.shuffleModeEnabled)
+              }
+            }
+            if (queueItems.isEmpty() && player.mediaItemCount > 1) {
+              val count = player.mediaItemCount
+              val upcomingCount = minOf(50, count - 1)
+              for (i in 1..upcomingCount) {
+                val itemIndex = (currentIndex + i) % count
+                val mediaItem = player.getMediaItemAt(itemIndex)
+                val title = mediaItem.mediaMetadata.title?.toString() ?: "Track ${itemIndex + 1}"
+                val artist = mediaItem.mediaMetadata.artist?.toString() ?: ""
+                queueItems.add(WidgetQueueItem(itemIndex, title, artist, false))
+              }
+            }
+          }
+
+          widgetManager.updateWidgets(
+            title = songTitle,
+            artist = artistName,
+            artworkUri = song?.thumbnailUrl ?: metadata?.thumbnailUrl,
+            isPlaying = playing,
+            isLiked = isLiked,
+            duration = if (player.duration != C.TIME_UNSET) player.duration else 0,
+            currentPosition = player.currentPosition,
+            isShuffle = if (::player.isInitialized) player.shuffleModeEnabled else false,
+            repeatMode = if (::player.isInitialized) player.repeatMode else Player.REPEAT_MODE_OFF,
+            isMuted = isMuted.value,
+            queueItems = queueItems,
+            lyrics = if (widgetLyricsSongId == metadata?.id) widgetLyrics else WidgetLyrics.Unavailable,
+            shouldApply = { currentMediaMetadata.value?.id == metadata?.id },
+          )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+          throw cancelled
+        } catch (error: Exception) {
+          Timber.tag(TAG).w(error, "Widget update failed")
+        }
+      }
     }
   }
 
@@ -4333,21 +4413,6 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   private fun stopWidgetUpdates() {
     widgetUpdateJob?.cancel()
     widgetUpdateJob = null
-  }
-
-  private fun shareSong() {
-    val songData = currentSong.value
-    val songId = songData?.song?.id ?: return
-
-    val shareIntent =
-      Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "https://share.echomusic.fun/watch?v=$songId")
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-    startActivity(
-      Intent.createChooser(shareIntent, null).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-    )
   }
 
   suspend fun getStreamUrl(mediaId: String): String? {
@@ -5014,7 +5079,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
                     )
                   val lyricsResult = lyricsHelper.getLyrics(metadata)
                   database.query {
-                    upsert(
+                    insertLyricsIfAbsent(
                       echo.music.iad1tya.db.entities.LyricsEntity(
                         id = mediaId,
                         lyrics = lyricsResult.lyrics ?: ""

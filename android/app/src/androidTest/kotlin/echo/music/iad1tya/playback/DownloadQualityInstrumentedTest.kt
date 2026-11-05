@@ -28,6 +28,8 @@ import echo.music.iad1tya.db.InternalDatabase
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.utils.YTPlayerUtils.PlaybackData
 import echo.music.iad1tya.utils.dataStore
+import echo.music.iad1tya.utils.findShareableAudio
+import echo.music.iad1tya.utils.audioShareIntent
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -112,6 +114,26 @@ class DownloadQualityInstrumentedTest {
       if (oldWifiOnly == null) it.remove(DownloadOnWifiOnlyKey) else it[DownloadOnWifiOnlyKey] = oldWifiOnly!!
     }
     Unit
+  }
+
+  @Test fun sharingRequiresPlayableContentAndGrantsReadAccess() = runBlocking {
+    val playable = File(context.cacheDir, "share-test-$id.wav")
+    val broken = File(context.cacheDir, "share-broken-$id.wav")
+    try {
+      playable.writeBytes(high)
+      broken.writeText("not an audio file")
+      val audio = findShareableAudio(context, store, Uri.fromFile(playable).toString())
+      assertTrue(audio != null)
+      assertEquals("content", audio!!.uri.scheme)
+      val intent = audioShareIntent(context, audio)
+      assertTrue(intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+      assertEquals(audio.uri, intent.clipData?.getItemAt(0)?.uri)
+      assertEquals(null, findShareableAudio(context, store, Uri.fromFile(broken).toString()))
+      assertEquals(null, findShareableAudio(context, store, "not-a-published-download"))
+    } finally {
+      playable.delete()
+      broken.delete()
+    }
   }
 
   private fun createUtil(): DownloadUtil {

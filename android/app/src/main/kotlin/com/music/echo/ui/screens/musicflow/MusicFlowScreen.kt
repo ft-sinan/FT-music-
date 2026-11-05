@@ -612,7 +612,7 @@ private fun Context.shareSong(song: SongItem) {
     Intent().apply {
       action = Intent.ACTION_SEND
       type = "text/plain"
-      putExtra(Intent.EXTRA_TEXT, song.shareLink)
+      putExtra(Intent.EXTRA_TEXT, echo.music.iad1tya.utils.youtubeSongLink(song.id) ?: return)
     }
   startActivity(Intent.createChooser(intent, null))
 }

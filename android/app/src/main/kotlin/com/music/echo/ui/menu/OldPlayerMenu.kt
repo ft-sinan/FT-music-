@@ -1,6 +1,5 @@
 package echo.music.iad1tya.ui.menu
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
@@ -76,6 +75,7 @@ import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.ui.component.BottomSheetState
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.Material3MenuGroup
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
@@ -95,6 +95,13 @@ fun OldPlayerMenu(
 ) {
   mediaMetadata ?: return
   val context = LocalContext.current
+  var showShareDialog by rememberSaveable(mediaMetadata.id) { mutableStateOf(false) }
+  if (showShareDialog) {
+    SongShareDialog(mediaId = mediaMetadata.id, onDismiss = {
+      showShareDialog = false
+      onDismiss()
+    })
+  }
   val database = LocalDatabase.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val coroutineScope = rememberCoroutineScope()
@@ -344,17 +351,7 @@ fun OldPlayerMenu(
               },
               text = stringResource(R.string.share),
               onClick = {
-                val intent =
-                  android.content.Intent().apply {
-                    action = android.content.Intent.ACTION_SEND
-                    type = "text/plain"
-                    putExtra(
-                      android.content.Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/watch?v=${mediaMetadata.id}"
-                    )
-                  }
-                context.startActivity(android.content.Intent.createChooser(intent, null))
-                onDismiss()
+                showShareDialog = true
               }
             )
           ),

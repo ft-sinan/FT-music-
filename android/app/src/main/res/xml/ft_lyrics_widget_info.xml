@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="210dp"
+    android:minResizeWidth="220dp"
+    android:minResizeHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_ft_lyrics"
+    android:previewLayout="@layout/widget_ft_lyrics"
+    android:description="@string/widget_lyrics_description"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

@@ -96,6 +96,20 @@ class SharedDownloadStore @Inject constructor(
     return MediaFingerprint(size, modified, parts[3], parts[4])
   }
 
+  /** Recheck the publication fingerprint before handing a file to another app. */
+  suspend fun verifiedUriForSharing(id: String): Uri? = withContext(Dispatchers.IO) {
+    lock.withLock {
+      val uri = recordedUri(id) ?: return@withLock null
+      if (state(id) != FileState.PRESENT) return@withLock null
+      val matches = when (uri.scheme) {
+        "file" -> legacyFingerprint(id)?.let { matchesLegacyFile(uri, it) } ?: false
+        "content" -> mediaFingerprint(id)?.let { matchesMediaFile(uri, it) } ?: false
+        else -> false
+      }
+      uri.takeIf { matches }
+    }
+  }
+
   fun totalSizeBytes(): Long = ids().sumOf { id ->
     if (state(id) != FileState.PRESENT) return@sumOf 0L
     val uri = recordedUri(id) ?: return@sumOf 0L
