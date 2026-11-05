@@ -38,6 +38,7 @@ jobs:
           python3 android/tests/ForkConfigurationTest.py
           python3 android/tests/ReleaseVersionTest.py
           python3 android/tests/ApkArchitectureTest.py
+          python3 android/tests/UiSmokeTest.py
       - name: Test and build the universal Android app
         working-directory: android
         run: |
