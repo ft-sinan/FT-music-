@@ -187,6 +187,95 @@ class DownloadQualityInstrumentedTest {
     } finally { source.close() }
   }
 
+  @Test fun downloadOptionDiscoveryReportsRealFormatsWithoutStartingADownload() = runBlocking {
+    val downloadUtil = createUtil()
+    val highBytes = 20 * 1024 * 1024 + 123 // Files above 15 MB are valid choices.
+    val saverBytes = 2 * 1024 * 1024
+    val qualities = mutableListOf<AudioQuality>()
+    downloadUtil.resolveDownloadSource = { requestedId, quality ->
+      assertEquals(id, requestedId)
+      qualities += quality
+      val highQuality = quality == AudioQuality.HIGH
+      val size = if (highQuality) highBytes else saverBytes
+      val itag = if (highQuality) 251 else 140
+      val mime = if (highQuality) "audio/webm; codecs=\"opus\"" else "audio/mp4; codecs=\"mp4a.40.2\""
+      playback("https://example.invalid/audio?itag=$itag&clen=$size&lmt=1", itag, size).let {
+        it.copy(format = it.format.copy(mimeType = mime, bitrate = if (highQuality) 160_000 else 48_000))
+      }
+    }
+
+    val result = downloadUtil.inspectDownloadOptions(id)
+    assertEquals(listOf(AudioQuality.HIGH, AudioQuality.LOW), qualities)
+    assertEquals(listOf(DownloadQuality.HIGH, DownloadQuality.DATA_SAVER), result.options.map { it.quality })
+    assertTrue(result.unavailable.isEmpty())
+    assertTrue(result.options.first().isRecommended)
+    assertEquals("audio/webm", result.options.first().source.mimeType)
+    assertEquals("opus", result.options.first().codecs)
+    assertEquals(160_000, result.options.first().bitrate)
+    assertEquals(highBytes.toLong(), result.options.first().sizeBytes)
+    assertEquals("audio/mp4", result.options.last().source.mimeType)
+    assertEquals("mp4a.40.2", result.options.last().codecs)
+    assertEquals(saverBytes.toLong(), result.options.last().sizeBytes)
+    assertTrue(id !in downloadUtil.downloads.value)
+    assertTrue(downloadCache.getCachedSpans(id).isEmpty())
+    assertTrue(!sources.hasRecord(id))
+  }
+
+  @Test fun downloadOptionDiscoveryKeepsUnknownValuesAndOtherAvailableChoices() = runBlocking {
+    val downloadUtil = createUtil()
+    downloadUtil.resolveDownloadSource = { _, quality ->
+      if (quality == AudioQuality.LOW) throw IOException("No low-quality source")
+      playback("https://example.invalid/audio?itag=251", 251, 1).let {
+        it.copy(format = it.format.copy(mimeType = "audio/webm", contentLength = null, bitrate = 0))
+      }
+    }
+    val result = downloadUtil.inspectDownloadOptions(id)
+    assertEquals(1, result.options.size)
+    assertEquals(DownloadQuality.HIGH, result.options.single().quality)
+    assertEquals(null, result.options.single().sizeBytes)
+    assertEquals(null, result.options.single().bitrate)
+    assertEquals(null, result.options.single().codecs)
+    assertEquals(setOf(DownloadQuality.DATA_SAVER), result.unavailable)
+    assertTrue(id !in downloadUtil.downloads.value)
+    assertTrue(!sources.hasRecord(id))
+  }
+
+  @Test fun downloadOptionDiscoveryDeduplicatesOnlyKnownMatchingFormats() = runBlocking {
+    val downloadUtil = createUtil()
+    downloadUtil.resolveDownloadSource = { _, _ ->
+      playback("https://example.invalid/audio?itag=251&clen=4096&lmt=1", 251, 4096)
+    }
+    val result = downloadUtil.inspectDownloadOptions(id)
+    assertEquals(1, result.options.size)
+    assertEquals(DownloadQuality.HIGH, result.options.single().quality)
+    assertTrue(result.unavailable.isEmpty())
+    assertTrue(!sources.hasRecord(id))
+  }
+
+  @Test fun downloadOptionDiscoveryDoesNotOfferVideoAsAudio() = runBlocking {
+    val downloadUtil = createUtil()
+    downloadUtil.resolveDownloadSource = { _, quality ->
+      playback("https://example.invalid/audio?itag=251&clen=4096", 251, 4096).let {
+        if (quality == AudioQuality.HIGH) it.copy(format = it.format.copy(mimeType = "video/mp4")) else it
+      }
+    }
+    val result = downloadUtil.inspectDownloadOptions(id)
+    assertEquals(listOf(DownloadQuality.DATA_SAVER), result.options.map { it.quality })
+    assertEquals(setOf(DownloadQuality.HIGH), result.unavailable)
+    assertTrue(!result.options.single().isRecommended)
+  }
+
+  @Test fun downloadOptionDiscoveryPropagatesCancellation() = runBlocking {
+    val downloadUtil = createUtil()
+    downloadUtil.resolveDownloadSource = { _, _ -> throw kotlinx.coroutines.CancellationException("Canceled") }
+    try {
+      downloadUtil.inspectDownloadOptions(id)
+      fail("Canceling discovery must not be reported as a missing format")
+    } catch (_: kotlinx.coroutines.CancellationException) { /* expected */ }
+    assertTrue(id !in downloadUtil.downloads.value)
+    assertTrue(!sources.hasRecord(id))
+  }
+
   @Test fun sourceFollowsPreferenceAndNeverUsesUnqualifiedStreamingCache() = runBlocking {
     cacheBytes(playerCache, ByteArray(high.size) { 0x55 })
     val qualities = Collections.synchronizedList(mutableListOf<AudioQuality>())

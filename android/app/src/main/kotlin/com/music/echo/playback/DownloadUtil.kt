@@ -485,6 +485,12 @@ constructor(
     }
   }
 
+  /** Preview available YouTube formats without creating or altering a download. */
+  internal suspend fun inspectDownloadOptions(songId: String): DownloadOptionDiscoveryResult =
+    kotlinx.coroutines.withContext(Dispatchers.IO) {
+      discoverYouTubeDownloadOptions(songId, resolveDownloadSource)
+    }
+
   fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }
 
   fun release() {
