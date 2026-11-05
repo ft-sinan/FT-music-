@@ -1586,11 +1586,10 @@ fun BottomSheetPlayer(
           }
 
           Spacer(Modifier.height(4.dp))
-          val sourceLabel = if (isCasting) "Casting" else when (playbackOrigins[mediaMetadata.id]) {
-            echo.music.iad1tya.playback.PlaybackOrigin.DEVICE -> "On device"
-            echo.music.iad1tya.playback.PlaybackOrigin.FT_DOWNLOAD -> "FT download"
-            echo.music.iad1tya.playback.PlaybackOrigin.STREAM -> "Streaming / cache"
-            else -> "Source unknown"
+          val sourceLabel = when (playerSourceBadge(playbackOrigins[mediaMetadata.id], isCasting)) {
+            PlayerSourceBadge.LOCAL -> stringResource(R.string.filter_local)
+            PlayerSourceBadge.CASTING -> "Casting"
+            null -> null
           }
           val qualityLabel = if (isCasting) "Quality unknown" else {
             echo.music.iad1tya.playback.PlaybackQuality.describe(
@@ -1601,7 +1600,7 @@ fun BottomSheetPlayer(
             )
           }
           Text(
-            text = "$sourceLabel · $qualityLabel",
+            text = playerDetailsText(sourceLabel, qualityLabel),
             style = MaterialTheme.typography.labelSmall,
             color = TextBackgroundColor.copy(alpha = 0.76f),
             maxLines = 1,

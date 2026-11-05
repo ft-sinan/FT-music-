@@ -62,6 +62,17 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("onPlayerBackgroundChange(PlayerBackgroundStyle.APPLE_MUSIC)", settings)
         self.assertRegex(settings, r"MiniPlayerBackgroundStyleKey,\s*defaultValue = PlayerBackgroundStyle.DEFAULT")
 
+    def test_player_source_label_is_simple_and_keeps_quality(self):
+        player_dir = MAIN / "kotlin/com/music/echo/ui/player"
+        player = (player_dir / "Player.kt").read_text()
+        badge = (player_dir / "PlayerSourceBadge.kt").read_text()
+        self.assertIn("playerSourceBadge(playbackOrigins[mediaMetadata.id], isCasting)", player)
+        self.assertIn("PlayerSourceBadge.LOCAL -> stringResource(R.string.filter_local)", player)
+        self.assertIn("playerDetailsText(sourceLabel, qualityLabel)", player)
+        self.assertIn("origin == PlaybackOrigin.DEVICE || origin == PlaybackOrigin.FT_DOWNLOAD", badge)
+        self.assertNotIn('"Streaming / cache"', player)
+        self.assertEqual(ET.parse(MAIN / "res/values/strings.xml").find("string[@name='filter_local']").text, "Local")
+
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())
         self.assertTrue((MAIN / "res/font/sans_flex.ttf").is_file())
