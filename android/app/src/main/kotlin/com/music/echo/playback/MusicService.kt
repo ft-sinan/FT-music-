@@ -314,6 +314,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         secondaryPlayer?.stop()
         secondaryPlayer?.clearMediaItems()
         secondaryPlayer = null
+        updateStreamingCacheProtection()
       }
     }
 
@@ -414,6 +415,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   @Inject @DownloadCache lateinit var downloadCache: SimpleCache
   @Inject lateinit var sharedDownloadStore: SharedDownloadStore
   @Inject lateinit var activePlaybackTracker: ActivePlaybackTracker
+  @Inject lateinit var streamingCacheGuard: StreamingCacheGuard
+  @Inject lateinit var streamingCacheExpiry: StreamingCacheExpiry
   @Inject @echo.music.iad1tya.di.ApplicationScope lateinit var applicationScope: CoroutineScope
 
   private val selectedLocalFiles = ConcurrentHashMap<String, android.net.Uri>()
@@ -436,6 +439,22 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
 
   private var secondaryPlayer: ExoPlayer? = null
   private var fadingPlayer: ExoPlayer? = null
+
+  /** Protect only players in use, not every song heard during the service's lifetime. */
+  private fun updateStreamingCacheProtection() {
+    val mediaIds = buildSet<String> {
+      if (::player.isInitialized && player.playWhenReady &&
+        (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+      ) {
+        player.currentMediaItem?.mediaId?.let(::add)
+      }
+      secondaryPlayer?.currentMediaItem?.mediaId?.let(::add)
+      fadingPlayer?.currentMediaItem?.mediaId?.let(::add)
+      prebuffered?.targetMediaId?.let(::add)
+    }
+    streamingCacheGuard.setActiveMediaIds(mediaIds)
+  }
+
   val isCrossfading = MutableStateFlow(false)
   private var crossfadeJob: Job? = null
 
@@ -2430,6 +2449,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     mediaItem: MediaItem?,
     reason: Int,
   ) {
+    updateStreamingCacheProtection()
     cutoffGuard.onTrackChanged(mediaItem?.mediaId)
     val prevItem = trackedMediaItem
     if (prevItem != null) {
@@ -2700,6 +2720,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         EVENT_POSITION_DISCONTINUITY
       )
     ) {
+      updateStreamingCacheProtection()
       scheduleCrossfade()
       val isBufferingOrReady =
         player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_READY
@@ -3328,12 +3349,17 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
         com.music.echo.playback.ChunkedDataSource.Factory(createOkHttpFactory(), 1024 * 1024L)
       }
 
+    val temporaryCacheFactory = CacheDataSource.Factory()
+      .setCache(playerCache)
+      .setUpstreamDataSourceFactory(upstreamFactory)
     return CacheDataSource.Factory()
       .setCache(downloadCache)
       .setUpstreamDataSourceFactory(
-        CacheDataSource.Factory()
-          .setCache(playerCache)
-          .setUpstreamDataSourceFactory(upstreamFactory)
+        androidx.media3.datasource.DataSource.Factory {
+          GuardedStreamingDataSource(
+            temporaryCacheFactory.createDataSource(), streamingCacheGuard, streamingCacheExpiry,
+          )
+        }
       )
       .setCacheWriteDataSinkFactory(null)
       .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
@@ -4153,6 +4179,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     playerEqProcessors.remove(player)?.let { dspController.removeAudioProcessor(it) }
 
     player.release()
+    streamingCacheGuard.setActiveMediaIds(emptySet())
     val playedIds = activePlaybackTracker.releaseAll()
     applicationScope.launch(Dispatchers.IO) {
       playedIds.forEach { sharedDownloadStore.cleanupRedundantCache(it) }
@@ -4539,6 +4566,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     } catch (e: Exception) {
       Timber.tag(TAG).d(e, "Failed to release prebuffered crossfade player")
     }
+    updateStreamingCacheProtection()
   }
 
   /**
@@ -4587,9 +4615,9 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     secPlayer.volume = 0f
     secPlayer.repeatMode = savedRepeatMode
     secPlayer.shuffleModeEnabled = savedShuffleEnabled
-    secPlayer.prepare() // playWhenReady left false: buffers ahead without playing.
-
     prebuffered = PrebufferedTransition(secPlayer, targetMediaId)
+    updateStreamingCacheProtection()
+    secPlayer.prepare() // playWhenReady left false: buffers ahead without playing.
   }
 
   private fun startCrossfade() {
@@ -4631,10 +4659,13 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
       secPlayer.volume = 0f
       secPlayer.repeatMode = savedRepeatMode
       secPlayer.shuffleModeEnabled = savedShuffleEnabled
+      secondaryPlayer = secPlayer
+      updateStreamingCacheProtection()
       secPlayer.prepare()
     }
 
     secondaryPlayer = secPlayer
+    updateStreamingCacheProtection()
     secPlayer.playWhenReady = true
 
     performCrossfadeSwap()
@@ -4655,6 +4686,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     player.pauseAtEndOfMediaItems = pauseAtEndOwner != null && pauseAtEndOwner === currentQueue
     _playerFlow.value = player
     secondaryPlayer = null
+    updateStreamingCacheProtection()
 
     currentPlayer.removeListener(this)
     currentPlayer.removeListener(sleepTimer)
@@ -4835,6 +4867,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     fadingPlayer?.release()
     fadingPlayer = null
     isCrossfading.value = false
+    updateStreamingCacheProtection()
     if (isRunning) sleepTimer.notifySongTransition()
   }
 

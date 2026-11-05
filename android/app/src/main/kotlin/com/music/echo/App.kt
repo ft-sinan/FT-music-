@@ -51,6 +51,8 @@ import timber.log.Timber
 class App : Application(), SingletonImageLoader.Factory {
 
   @Inject @ApplicationScope lateinit var applicationScope: CoroutineScope
+  // Do not open the player cache in the separate crash-reporting process.
+  @Inject lateinit var streamingCacheExpiry: dagger.Lazy<echo.music.iad1tya.playback.StreamingCacheExpiry>
 
   override fun startForegroundService(service: Intent): android.content.ComponentName? {
     return try {
@@ -100,6 +102,14 @@ class App : Application(), SingletonImageLoader.Factory {
 
     if (BuildConfig.DEBUG) {
       Timber.plant(Timber.DebugTree())
+    }
+
+    applicationScope.launch(Dispatchers.IO) {
+      try {
+        streamingCacheExpiry.get().start()
+      } catch (e: Exception) {
+        Timber.w(e, "Could not start temporary streaming-cache cleanup")
+      }
     }
 
     applicationScope.launch(Dispatchers.IO) {

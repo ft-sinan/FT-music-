@@ -13,4 +13,5 @@
     <exclude domain="sharedpref" path="ft_shared_downloads.xml" />
     <exclude domain="sharedpref" path="ft_shared_pending_removals.xml" />
     <exclude domain="sharedpref" path="ft_download_sources.xml" />
+    <exclude domain="sharedpref" path="ft_streaming_cache_ages.xml" />
 </full-backup-content>
