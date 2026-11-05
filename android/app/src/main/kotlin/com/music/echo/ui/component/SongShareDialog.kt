@@ -23,6 +23,7 @@ import echo.music.iad1tya.R
 import echo.music.iad1tya.utils.ShareableAudio
 import echo.music.iad1tya.utils.audioShareIntent
 import echo.music.iad1tya.utils.findShareableAudio
+import echo.music.iad1tya.utils.isLocalMediaId
 import echo.music.iad1tya.utils.youtubeSongLink
 
 private sealed interface FileLookup {
@@ -34,11 +35,25 @@ private sealed interface FileLookup {
 @Composable
 fun SongShareDialog(mediaId: String, mimeHint: String? = null, onDismiss: () -> Unit) {
   val context = LocalContext.current
-  val store = LocalDownloadUtil.current.sharedDownloadStore
+  val downloadUtil = LocalDownloadUtil.current
+  val store = downloadUtil.sharedDownloadStore
   val link = youtubeSongLink(mediaId)
-  val file by produceState<FileLookup>(initialValue = FileLookup.Checking, mediaId, mimeHint, store) {
-    value = findShareableAudio(context, store, mediaId, mimeHint)?.let { FileLookup.Ready(it) }
-      ?: FileLookup.Unavailable
+  val file by produceState<FileLookup>(initialValue = FileLookup.Checking, mediaId, mimeHint, downloadUtil) {
+    var audio = findShareableAudio(context, store, mediaId, mimeHint)
+    if (audio == null && !mediaId.isLocalMediaId()) {
+      val copy = downloadUtil.copyPrivateDownloadForSharing(mediaId)
+      if (copy != null) {
+        try {
+          audio = findShareableAudio(context, store, Uri.fromFile(copy.file).toString(), copy.mimeType)
+        } finally {
+          if (audio == null) copy.file.delete()
+        }
+      } else {
+        // Publication may have finished while the private-copy check was waiting for the lock.
+        audio = findShareableAudio(context, store, mediaId, mimeHint)
+      }
+    }
+    value = audio?.let { FileLookup.Ready(it) } ?: FileLookup.Unavailable
   }
   fun launchChooser(intent: Intent) {
     try {

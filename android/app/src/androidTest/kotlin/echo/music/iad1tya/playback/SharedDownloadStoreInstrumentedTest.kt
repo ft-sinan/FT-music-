@@ -33,6 +33,7 @@ import echo.music.iad1tya.db.entities.SongEntity
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.playback.queues.ListQueue
+import echo.music.iad1tya.utils.findShareableAudio
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -271,6 +272,63 @@ class SharedDownloadStoreInstrumentedTest {
     awaitRemoval(downloadUtil)
     awaitSharedRemoval(downloadUtil)
     assertFalse(store.hasRecord(id))
+  }
+
+  private fun recordPrivateSource() {
+    sources.qualityFor(id, DownloadQuality.HIGH)
+    assertTrue(sources.acceptSource(id, DownloadSourceIdentity(1, "audio/wav", bytes.size.toLong(), "test"), false))
+  }
+
+  @Test fun completePrivateDownloadCanBeSharedAndIsCleanedOnRemoval() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    val copy = requireNotNull(store.copyPrivateForSharing(download) { true }) {
+      "A verified completed private download should be shareable"
+    }
+    try {
+      assertArrayEquals(bytes, copy.file.readBytes())
+      val audio = findShareableAudio(context, store, Uri.fromFile(copy.file).toString(), copy.mimeType)
+      assertTrue("The temporary file must contain a playable audio track", audio != null)
+      assertArrayEquals(bytes, context.contentResolver.openInputStream(audio!!.uri)!!.use { it.readBytes() })
+      assertFalse(store.hasRecord(id))
+      assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
+      assertTrue(store.delete(id))
+      assertFalse("Removing a download should clear its temporary share copies", copy.file.exists())
+    } finally {
+      copy.file.delete()
+    }
+  }
+
+  @Test fun completeButUnidentifiedPrivateDownloadCannotBeShared() = runBlocking {
+    val download = seed()
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
+  }
+
+  @Test fun partialPrivateDownloadCannotBeShared() = runBlocking {
+    val download = seed(cachedBytes = bytes.size / 2)
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    recordPrivateSource()
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    assertTrue(cache.getCachedSpans(id).isNotEmpty())
+  }
+
+  @Test fun downloadBeingRemovedCannotBeShared() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    store.markRemovalPending(id)
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+  }
+
+  @Test fun changedDownloadDoesNotLeaveAUsableTemporaryCopy() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    val directory = File(context.cacheDir, "ft-song-share")
+    val before = directory.listFiles()?.map { it.name }?.toSet().orEmpty()
+    var checks = 0
+    assertEquals(null, store.copyPrivateForSharing(download) { ++checks == 1 })
+    assertEquals(before, directory.listFiles()?.map { it.name }?.toSet().orEmpty())
+    assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
   }
 
   @Test fun removingInTheAppDeletesTheSharedFile() = runBlocking {

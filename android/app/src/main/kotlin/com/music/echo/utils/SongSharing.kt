@@ -23,7 +23,8 @@ internal fun youtubeSongLink(id: String): String? =
 /**
  * Returns an accessible device audio file or an FT published download whose fingerprint still
  * matches. A local file's full playability cannot be guaranteed by a container check alone.
- * Partial Media3 cache spans are deliberately not exposed as files. Legacy file:// downloads are converted to
+ * Partial Media3 cache spans are deliberately not exposed as files. Complete private downloads
+ * are copied and verified separately before this check. Local file:// paths are converted to
  * temporary read-only content:// grants through the existing FileProvider.
  */
 internal suspend fun findShareableAudio(

@@ -110,6 +110,107 @@ class SharedDownloadStore @Inject constructor(
     }
   }
 
+  internal data class TemporaryShareCopy(val file: File, val mimeType: String)
+
+  private data class PrivateSpanSnapshot(
+    val position: Long,
+    val length: Long,
+    val file: File,
+    val device: Long,
+    val inode: Long,
+    val modified: Long,
+  )
+
+  private val temporaryShareDirectory get() = File(context.cacheDir, "ft-song-share")
+
+  private fun shareFilePrefix(id: String): String {
+    val hash = MessageDigest.getInstance("SHA-256").digest(id.toByteArray(Charsets.UTF_8))
+      .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    return "ft-share-$hash-"
+  }
+
+  private fun cleanTemporaryShares(id: String? = null) {
+    val prefix = id?.let(::shareFilePrefix)
+    val staleBefore = System.currentTimeMillis() - 3L * 24 * 60 * 60 * 1000
+    temporaryShareDirectory.listFiles()?.forEach { file ->
+      val belongsToSong = prefix != null && file.name.startsWith(prefix)
+      val oldShare = prefix == null && file.name.startsWith("ft-share-") &&
+        file.lastModified() in 1L until staleBefore
+      if (file.isFile && (belongsToSong || oldShare)) file.delete()
+    }
+  }
+
+  /** Snapshot only a contiguous, complete private download; never infer a file from a partial span. */
+  private fun privateSpanSnapshot(id: String, size: Long): List<PrivateSpanSnapshot>? {
+    var position = 0L
+    val snapshot = mutableListOf<PrivateSpanSnapshot>()
+    for (span in cache.getCachedSpans(id).sortedBy { it.position }) {
+      val file = span.file ?: return null
+      if (span.position != position || span.length <= 0 || span.length > size - position || !file.isFile) return null
+      val stat = Os.stat(file.absolutePath)
+      if (stat.st_size != span.length) return null
+      snapshot.add(PrivateSpanSnapshot(span.position, span.length, file, stat.st_dev, stat.st_ino, file.lastModified()))
+      position += span.length
+    }
+    return snapshot.takeIf { position == size && it.isNotEmpty() }
+  }
+
+  /**
+   * Copy a completed private Media3 download into app-private, temporary share storage.
+   * We require an independently recorded representation, a complete contiguous cache, and a
+   * stable download/source/file snapshot before and after the copy. A shared publication or
+   * download deletion cannot be made unsafe by serving a hole, mixed representation or partial
+   * output. No audio bytes are modified or transcoded.
+   */
+  internal suspend fun copyPrivateForSharing(
+    download: Download,
+    stillComplete: () -> Boolean,
+  ): TemporaryShareCopy? = withContext(Dispatchers.IO) {
+    lock.withLock {
+      val id = download.request.id
+      if (download.state != Download.STATE_COMPLETED || !stillComplete() || hasRecord(id) ||
+        pendingRemovals.contains(id)) return@withLock null
+      var temporary: File? = null
+      var keep = false
+      try {
+        val source = sourceRegistry.sourceFor(id) ?: return@withLock null
+        val size = source.length?.takeIf { it > 0 } ?: return@withLock null
+        if (source.itag == null || (download.contentLength > 0 && download.contentLength != size)) return@withLock null
+        val extension = SharedDownloadNames.extension(source.mimeType) ?: return@withLock null
+        val before = privateSpanSnapshot(id, size) ?: return@withLock null
+        val directory = temporaryShareDirectory
+        check(directory.isDirectory || directory.mkdirs())
+        cleanTemporaryShares()
+        val outputFile = File.createTempFile(shareFilePrefix(id), ".$extension", directory)
+        temporary = outputFile
+        val digest = FileOutputStream(outputFile).use { output ->
+          copyFiles(before.map { it.file }, output, size)
+        }
+        val fingerprint = LegacyFingerprint(size, outputFile.lastModified(), digest)
+        if (!matchesLegacyFile(Uri.fromFile(outputFile), fingerprint)) return@withLock null
+        // Committed Media3 spans should be immutable. Re-read them to detect replacement or
+        // modification during the copy, then compare the cache and download identities again.
+        val discard = object : OutputStream() {
+          override fun write(value: Int) = Unit
+          override fun write(bytes: ByteArray, offset: Int, length: Int) = Unit
+        }
+        if (copyFiles(before.map { it.file }, discard, size) != digest ||
+          privateSpanSnapshot(id, size) != before || sourceRegistry.sourceFor(id) != source ||
+          !stillComplete() || hasRecord(id) || pendingRemovals.contains(id)) return@withLock null
+        currentCoroutineContext().ensureActive()
+        keep = true
+        TemporaryShareCopy(outputFile, source.mimeType)
+      } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+      } catch (error: Exception) {
+        Timber.w(error, "Unable to prepare a private download for sharing")
+        null
+      } finally {
+        if (!keep) temporary?.delete()
+      }
+    }
+  }
+
   fun totalSizeBytes(): Long = ids().sumOf { id ->
     if (state(id) != FileState.PRESENT) return@sumOf 0L
     val uri = recordedUri(id) ?: return@sumOf 0L
@@ -348,6 +449,8 @@ class SharedDownloadStore @Inject constructor(
 
   suspend fun delete(id: String): Boolean = withContext(Dispatchers.IO) {
     lock.withLock {
+      // Temporary share copies are not library files and must not survive download removal.
+      cleanTemporaryShares(id)
       val uri = recordedUri(id)
       if (uri == null) {
         pendingRemovals.edit().remove(id).commit()

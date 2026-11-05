@@ -475,6 +475,16 @@ constructor(
     }
   }
 
+  internal suspend fun copyPrivateDownloadForSharing(id: String): SharedDownloadStore.TemporaryShareCopy? {
+    val original = downloads.value[id] ?: return null
+    return sharedDownloadStore.copyPrivateForSharing(original) {
+      val current = downloads.value[id]
+      current != null && current.state == Download.STATE_COMPLETED &&
+        current.startTimeMs == original.startTimeMs && current.updateTimeMs == original.updateTimeMs &&
+        current.request.uri == original.request.uri
+    }
+  }
+
   fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }
 
   fun release() {
