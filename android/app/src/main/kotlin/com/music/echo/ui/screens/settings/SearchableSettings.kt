@@ -1982,18 +1982,6 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
     ),
     SearchableSetting("Edit", null, "Discord", "settings/discord"),
     SearchableSetting(
-      stringResource(R.string.automix),
-      stringResource(R.string.automix_desc),
-      "Player and audio",
-      "settings/player"
-    ),
-    SearchableSetting(
-      stringResource(R.string.automix_debug),
-      stringResource(R.string.automix_debug_desc),
-      "Player and audio",
-      "settings/player"
-    ),
-    SearchableSetting(
       stringResource(R.string.enable_haptics),
       stringResource(R.string.enable_haptics_desc),
       "Appearance",

@@ -108,6 +108,19 @@ class ForkConfigurationTest(unittest.TestCase):
             exclusions = {el.get("path") for el in modern.findall(f"{section}/exclude") if el.get("domain") == "sharedpref"}
             self.assertTrue(expected <= exclusions, section)
 
+    def test_removed_beat_matching_keeps_crossfade_and_radio_queue(self):
+        service = (MAIN / "kotlin/com/music/echo/playback/MusicService.kt").read_text()
+        player = (MAIN / "kotlin/com/music/echo/ui/player/Player.kt").read_text()
+        settings = (MAIN / "kotlin/com/music/echo/ui/screens/settings/PlayerSettings.kt").read_text()
+        self.assertNotIn("AutomixCrossfadeKey", service + settings)
+        self.assertNotIn("computeAutomixPlan", service)
+        self.assertIn("CrossfadeEnabledKey", service + settings)
+        self.assertIn("EqualPowerCurve.calculateGains", service)
+        self.assertIn("automixItems", service)
+        self.assertIn("addToQueueAutomix", player)
+        for menu in ("PlayerMenu.kt", "OldPlayerMenu.kt"):
+            self.assertNotIn("Song DNA", (MAIN / "kotlin/com/music/echo/ui/menu" / menu).read_text())
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):
