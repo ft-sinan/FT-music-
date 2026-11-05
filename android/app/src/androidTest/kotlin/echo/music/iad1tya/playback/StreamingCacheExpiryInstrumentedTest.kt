@@ -273,7 +273,10 @@ class StreamingCacheExpiryInstrumentedTest {
     engine().clean(now)
     assertTrue(playerCache.getCachedSpans(legacy).isEmpty())
     assertFalse(playerCache.getCachedSpans(future).isEmpty())
-    assertEquals(now, agePreferences.getLong(future, 0L))
+    // A rolled-forward creation time is rewritten from the span's file time. Android 9/10
+    // filesystems truncate that timestamp to whole seconds, so allow up to one second of slack.
+    val rewritten = agePreferences.getLong(future, 0L)
+    assertTrue("clock rollback kept $rewritten for now $now", rewritten in (now - 1_000)..now)
     engine().clean(now + STREAMING_CACHE_LIFETIME_MS)
     assertTrue(playerCache.getCachedSpans(future).isEmpty())
   }
