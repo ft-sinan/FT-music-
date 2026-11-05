@@ -166,6 +166,7 @@ import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
 import echo.music.iad1tya.canvas.CanvasArtwork
+import echo.music.iad1tya.constants.DefaultPlayerAppearance
 import echo.music.iad1tya.constants.AudioQuality
 import echo.music.iad1tya.constants.AudioQualityKey
 import echo.music.iad1tya.constants.CanvasThumbnailAnimationKey
@@ -294,7 +295,7 @@ fun BottomSheetPlayer(
   val playerConnection = LocalPlayerConnection.current ?: return
 
   val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
-    rememberPreference(UseNewPlayerDesignKey, defaultValue = true)
+    rememberPreference(UseNewPlayerDesignKey, defaultValue = DefaultPlayerAppearance.USE_NEW_PLAYER_DESIGN)
   val (musicFlowEnabled) =
     rememberPreference(MusicFlowEnabledKey, defaultValue = true)
   val showCodecOnPlayer by
@@ -313,7 +314,7 @@ fun BottomSheetPlayer(
   val playerBackgroundPref by
     rememberEnumPreference(
       key = PlayerBackgroundStyleKey,
-      defaultValue = PlayerBackgroundStyle.GRADIENT
+      defaultValue = DefaultPlayerAppearance.BACKGROUND_STYLE
     )
   val playerBackground = playerBackgroundPref
   val playerButtonsStyle by

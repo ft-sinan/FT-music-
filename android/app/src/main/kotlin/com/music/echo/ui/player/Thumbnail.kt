@@ -78,6 +78,7 @@ import echo.music.iad1tya.R
 import echo.music.iad1tya.applecanvas.AppleMusicCanvasProvider
 import echo.music.iad1tya.canvas.CanvasArtwork
 import echo.music.iad1tya.canvas.TidalCanvasProvider
+import echo.music.iad1tya.constants.DefaultPlayerAppearance
 import echo.music.iad1tya.constants.CanvasThumbnailAnimationKey
 import echo.music.iad1tya.constants.CropAlbumArtKey
 import echo.music.iad1tya.constants.HidePlayerThumbnailKey
@@ -271,7 +272,7 @@ fun Thumbnail(
   val playerBackgroundPref by
     rememberEnumPreference(
       key = PlayerBackgroundStyleKey,
-      defaultValue = PlayerBackgroundStyle.GRADIENT
+      defaultValue = DefaultPlayerAppearance.BACKGROUND_STYLE
     )
   val isLocalMedia = mediaMetadata?.id?.isLocalMediaId() == true
   val playerBackground = playerBackgroundPref

@@ -493,6 +493,12 @@ enum class PlayerBackgroundStyle {
   LIQUID_GLASS,
 }
 
+/** The Apple-inspired layout uses the legacy/inverted design flag. */
+object DefaultPlayerAppearance {
+  const val USE_NEW_PLAYER_DESIGN = false
+  val BACKGROUND_STYLE = PlayerBackgroundStyle.APPLE_MUSIC
+}
+
 val TopSize = stringPreferencesKey("topSize")
 val HistoryDuration = floatPreferencesKey("historyDuration")
 

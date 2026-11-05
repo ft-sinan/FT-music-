@@ -55,6 +55,7 @@ import androidx.core.content.edit
 import androidx.navigation.NavController
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.DefaultPlayerAppearance
 import echo.music.iad1tya.constants.AppFont
 import echo.music.iad1tya.constants.AppIconTypeKey
 import echo.music.iad1tya.constants.AppleMusicLyricsBlurKey
@@ -189,7 +190,7 @@ fun AppearanceSettings(
   }
 
   val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
-    rememberPreference(UseNewPlayerDesignKey, defaultValue = true)
+    rememberPreference(UseNewPlayerDesignKey, defaultValue = DefaultPlayerAppearance.USE_NEW_PLAYER_DESIGN)
   val (showCodecOnPlayer, onShowCodecOnPlayerChange) =
     rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, defaultValue = false)
   val (hidePlayerSlider, onHidePlayerSliderChange) =
@@ -199,7 +200,7 @@ fun AppearanceSettings(
   val (cropAlbumArt, onCropAlbumArtChange) =
     rememberPreference(CropAlbumArtKey, defaultValue = false)
   val (playerBackground, onPlayerBackgroundChange) =
-    rememberEnumPreference(PlayerBackgroundStyleKey, defaultValue = PlayerBackgroundStyle.GRADIENT)
+    rememberEnumPreference(PlayerBackgroundStyleKey, defaultValue = DefaultPlayerAppearance.BACKGROUND_STYLE)
   val (miniPlayerBackground, onMiniPlayerBackgroundChange) =
     rememberEnumPreference(
       MiniPlayerBackgroundStyleKey,

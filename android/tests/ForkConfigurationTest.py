@@ -46,6 +46,22 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("https://music.youtube.com/watch?v=$id", ytitems)
         self.assertNotIn("share.echomusic.fun", ytitems)
 
+    def test_apple_inspired_player_is_the_consistent_default(self):
+        defaults = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/constants/PreferenceKeys.kt").read_text()
+        self.assertIn("const val USE_NEW_PLAYER_DESIGN = false", defaults)
+        self.assertIn("val BACKGROUND_STYLE = PlayerBackgroundStyle.APPLE_MUSIC", defaults)
+        kotlin = MAIN / "kotlin/com/music/echo/ui"
+        for path in ("screens/settings/AppearanceSettings.kt", "player/Player.kt", "player/Queue.kt"):
+            source = (kotlin / path).read_text()
+            self.assertIn("rememberPreference(UseNewPlayerDesignKey, defaultValue = DefaultPlayerAppearance.USE_NEW_PLAYER_DESIGN)", source, path)
+        for path in ("screens/settings/AppearanceSettings.kt", "player/Player.kt", "player/Thumbnail.kt", "component/Lyrics.kt"):
+            source = (kotlin / path).read_text()
+            self.assertIn("defaultValue = DefaultPlayerAppearance.BACKGROUND_STYLE", source, path)
+        settings = (kotlin / "screens/settings/AppearanceSettings.kt").read_text()
+        self.assertIn("checked = !useNewPlayerDesign", settings)
+        self.assertIn("onPlayerBackgroundChange(PlayerBackgroundStyle.APPLE_MUSIC)", settings)
+        self.assertRegex(settings, r"MiniPlayerBackgroundStyleKey,\s*defaultValue = PlayerBackgroundStyle.DEFAULT")
+
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())
         self.assertTrue((MAIN / "res/font/sans_flex.ttf").is_file())
