@@ -575,6 +575,8 @@ private fun ThumbnailItem(
 
   val canvasThumbnailAnimation by
     rememberPreference(CanvasThumbnailAnimationKey, defaultValue = false)
+  val dataSaver by rememberPreference(echo.music.iad1tya.constants.DataSaverEnabledKey, false)
+  val manualCanvas = rememberManualCanvas(if (isCurrentItem) item.mediaId else null)
 
   Box(
     modifier =
@@ -669,9 +671,9 @@ private fun ThumbnailItem(
       }
 
       if (
-        canvasThumbnailAnimation &&
+        !dataSaver && (canvasThumbnailAnimation || manualCanvas != null) &&
           item.mediaId == currentMediaId &&
-          !rotatingThumbnail &&
+          (!rotatingThumbnail || manualCanvas != null) &&
           playerBackground != PlayerBackgroundStyle.APPLE_MUSIC
       ) {
         var canvasArtwork by remember(item.mediaId) { mutableStateOf<CanvasArtwork?>(null) }
@@ -681,7 +683,11 @@ private fun ThumbnailItem(
           if (country.length == 2) country.lowercase(Locale.ROOT) else "us"
         }
 
-        LaunchedEffect(item.mediaId) {
+        LaunchedEffect(item.mediaId, manualCanvas) {
+          manualCanvas?.let {
+            canvasArtwork = it.artwork
+            return@LaunchedEffect
+          }
           CanvasArtworkPlaybackCache.get(item.mediaId)?.let { cached ->
             canvasArtwork = cached
             return@LaunchedEffect
@@ -826,6 +832,10 @@ private fun ThumbnailItem(
               primaryUrl = artwork.animated,
               fallbackUrl = artwork.videoUrl,
               isPlaying = isPlaying,
+              retryGeneration = manualCanvas?.generation ?: 0L,
+              onPlaybackFailure = if (manualCanvas != null) ({
+                android.widget.Toast.makeText(context, R.string.animation_playback_failed, android.widget.Toast.LENGTH_LONG).show()
+              }) else null,
               modifier = Modifier.fillMaxSize()
             )
           }

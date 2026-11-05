@@ -18,8 +18,13 @@ internal sealed interface WidgetLyrics {
       if (text.isEmpty() || text == LyricsEntity.LYRICS_NOT_FOUND) return Unavailable
 
       val parsed = LyricsUtils.parseLyrics(text)
-      if (parsed.any { it.time > 0L } && parsed.any { it.text.isNotBlank() }) {
-        return Timed(parsed.map { Line(it.time, it.text.trim()) })
+      if (TIMESTAMP.containsMatchIn(text) && parsed.any { it.text.isNotBlank() }) {
+        // The shared parser intentionally ignores timestamp-only lines. For widgets those mark
+        // instrumental gaps, so restore them instead of showing a stale verse indefinitely.
+        val gaps = emptyTimestampLines(text)
+        val lines = (parsed.map { Line(it.time, it.text.trim()) } + gaps)
+          .sortedWith(compareBy<Line> { it.timeMs }.thenBy { it.text.isNotBlank() })
+        return Timed(lines)
       }
 
       val plain =
@@ -47,3 +52,19 @@ internal fun WidgetLyrics.Timed.at(positionMs: Long): WidgetLyricsFrame {
 
 internal data class WidgetLyricsFrame(val current: String?, val next: String?)
 private const val MAX_TEXT_LENGTH = 240
+
+private val TIMESTAMP = Regex("""\[(\d{1,2}):(\d{2})\.(\d{2,3})]""")
+private val TIMESTAMP_ONLY_LINE = Regex("""^(?:\s*\[\d{1,2}:\d{2}\.\d{2,3}]\s*)+$""")
+
+private fun emptyTimestampLines(raw: String): List<WidgetLyrics.Line> {
+  val normalized = raw.trim().removePrefix("\"").removeSuffix("\"")
+    .replace("\\\\", "\\").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+  return normalized.lines().filter { TIMESTAMP_ONLY_LINE.matches(it) }.flatMap { line ->
+    TIMESTAMP.findAll(line).map { match ->
+      val minutes = match.groupValues[1].toLong()
+      val seconds = match.groupValues[2].toLong()
+      val milliseconds = match.groupValues[3].padEnd(3, '0').toLong()
+      WidgetLyrics.Line((minutes * 60 + seconds) * 1000 + milliseconds, "")
+    }.toList()
+  }
+}

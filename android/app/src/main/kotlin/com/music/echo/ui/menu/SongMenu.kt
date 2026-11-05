@@ -86,6 +86,7 @@ import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalAudioDeletion
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
+import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
@@ -113,6 +114,7 @@ fun SongMenu(
   val playerConnection = LocalPlayerConnection.current ?: return
   val songState = database.song(originalSong.id).collectAsState(initial = originalSong)
   val song = songState.value ?: originalSong
+  val loadAnimationItem = rememberLoadAnimationItem(song.toMediaMetadata(), onDismiss)
   var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
   if (showShareDialog) {
     SongShareDialog(mediaId = song.id, mimeHint = song.format?.mimeType, onDismiss = {
@@ -444,6 +446,10 @@ fun SongMenu(
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
       )
     }
+    item {
+      Material3MenuGroup(items = listOf(loadAnimationItem))
+    }
+
     item {
       Material3MenuGroup(
         items =

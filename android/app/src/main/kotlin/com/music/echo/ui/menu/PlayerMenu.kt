@@ -95,6 +95,7 @@ import echo.music.iad1tya.ui.component.DefaultDialog
 import echo.music.iad1tya.ui.component.ListDialog
 import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.Material3MenuGroup
+import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
@@ -119,6 +120,7 @@ fun PlayerMenu(
 ) {
   mediaMetadata ?: return
   val context = LocalContext.current
+  val loadAnimationItem = rememberLoadAnimationItem(mediaMetadata, onDismiss)
   var showShareDialog by rememberSaveable(mediaMetadata.id) { mutableStateOf(false) }
   if (showShareDialog) {
     SongShareDialog(mediaId = mediaMetadata.id, onDismiss = {
@@ -464,6 +466,10 @@ fun PlayerMenu(
         columns = if (isListenTogetherGuest) 2 else 3,
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
       )
+    }
+
+    item {
+      Material3MenuGroup(items = listOf(loadAnimationItem))
     }
 
     item {

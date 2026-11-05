@@ -433,7 +433,7 @@
     <string name="restore_failed">Échec de la restauration de la sauvegarde</string>
 
     <string name="discord_integration">Intégration Discord</string>
-    <string name="discord_information">echomusic utilise la bibliothèque KizzyRPC pour définir le statut de votre compte Discord. Cela implique l\'utilisation de la passerelle Discord, ce qui peut être considéré comme une violation des CGU de Discord. Cependant, aucun bannissement de compte n\'a été signalé pour cette raison. À utiliser à vos propres risques.\nechomusic ne fera qu\'extraire votre jeton et tout le reste est stocké localement.</string>
+    <string name="discord_information">FT Music utilise la bibliothèque KizzyRPC pour définir le statut de votre compte Discord. Cela implique l\'utilisation de la passerelle Discord, ce qui peut être considéré comme une violation des CGU de Discord. Cependant, aucun bannissement de compte n\'a été signalé pour cette raison. À utiliser à vos propres risques.\nFT Music ne fera qu\'extraire votre jeton et tout le reste est stocké localement.</string>
     <string name="dismiss">Ignorer</string>
     <string name="options">Options</string>
     <string name="preview">Aperçu</string>
@@ -514,9 +514,9 @@
     <string name="set_listenbrainz_token">Définir le jeton ListenBrainz</string>
 
     <!-- Echo Extractor Settings -->
-    <string name="youtube_decryption_settings">Extracteur Echo</string>
+    <string name="youtube_decryption_settings">Extracteur YouTube</string>
     <string name="youtube_decryption_desc">Configurer les paramètres de l\'extracteur</string>
-    <string name="youtube_decryption_support">Extracteur Echo</string>
+    <string name="youtube_decryption_support">Extracteur YouTube</string>
     <string name="youtube_decryption_support_desc">Extrait automatiquement les configurations de lecture YouTube. Verrouillé sur Actif.</string>
     <string name="force_update_cipher">Forcer la mise à jour des configurations</string>
     <string name="force_update_cipher_desc">Télécharger les derniers mappages de contournement de l\'extracteur. Limité à 3 mises à jour par jour.</string>
@@ -841,7 +841,7 @@
     <string name="scrobble_delay_minutes_desc">Gérer les paramètres de délai de scrobble en minutes</string>
     <string name="ai_recommendations_refresh_desc">Configurer les paramètres IA pour l\'actualisation des recommandations</string>
     <string name="last_updated_desc">Gérer les paramètres de dernière mise à jour</string>
-    <string name="youtube_decryption_settings_desc">Gérer les paramètres de l\'extracteur Echo</string>
+    <string name="youtube_decryption_settings_desc">Gérer les paramètres de l\'extracteur YouTube</string>
     <string name="refresh_desc">Gérer les paramètres d\'actualisation</string>
     <string name="activity_status_desc">Gérer les paramètres de statut d\'activité</string>
     <string name="platform_status_desc">Gérer les paramètres de statut de la plateforme</string>

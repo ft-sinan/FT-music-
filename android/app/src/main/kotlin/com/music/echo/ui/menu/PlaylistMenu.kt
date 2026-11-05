@@ -407,7 +407,9 @@ fun PlaylistMenu(
                     type = "text/plain"
                     putExtra(
                       Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/playlist?list=${dbPlaylist?.playlist?.browseId}"
+                      dbPlaylist?.playlist?.browseId?.takeIf { it.isNotBlank() }
+                        ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+                        ?: songs.joinToString("\n") { it.song.title }
                     )
                   }
                 context.startActivity(Intent.createChooser(intent, null))

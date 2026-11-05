@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,14 +41,17 @@ fun CanvasArtworkPlayer(
   isPlaying: Boolean,
   modifier: Modifier = Modifier,
   fitWideArtwork: Boolean = false,
+  retryGeneration: Long = 0L,
+  onPlaybackFailure: (() -> Unit)? = null,
 ) {
   val context = LocalContext.current
   val primary = primaryUrl?.takeIf { it.isNotBlank() }
   val fallback = fallbackUrl?.takeIf { it.isNotBlank() }
   val initial = primary ?: fallback ?: return
-  var currentUrl by remember(initial) { mutableStateOf(initial) }
-  var isVideoReady by remember(initial) { mutableStateOf(false) }
-  var videoAspectRatio by remember(initial) { mutableStateOf(1f) }
+  var currentUrl by remember(initial, retryGeneration) { mutableStateOf(initial) }
+  var isVideoReady by remember(initial, retryGeneration) { mutableStateOf(false) }
+  var videoAspectRatio by remember(initial, retryGeneration) { mutableStateOf(1f) }
+  val failureCallback by rememberUpdatedState(onPlaybackFailure)
 
   val okHttpClient = remember {
     OkHttpClient.Builder()
@@ -134,7 +138,7 @@ fun CanvasArtworkPlayer(
     }
   }
 
-  DisposableEffect(exoPlayer, primary, fallback) {
+  DisposableEffect(exoPlayer, primary, fallback, retryGeneration) {
     val listener =
       object : Player.Listener {
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -147,6 +151,8 @@ fun CanvasArtworkPlayer(
           isVideoReady = false
           if (!next.isNullOrBlank() && next != currentUrl) {
             currentUrl = next
+          } else {
+            failureCallback?.invoke()
           }
         }
 
@@ -164,7 +170,7 @@ fun CanvasArtworkPlayer(
     onDispose { exoPlayer.removeListener(listener) }
   }
 
-  LaunchedEffect(currentUrl, exoPlayer) {
+  LaunchedEffect(currentUrl, exoPlayer, retryGeneration) {
     val normalized = currentUrl.trim()
     val mimeType =
       when {

@@ -394,7 +394,7 @@
     <string name="enable_scrobbling">Activer le scrobbling</string>
     <string name="lastfm_now_playing">Envoyer le titre en cours de lecture</string>
     <string name="last_fm_send_likes">Envoyer les J\'aime / Je n\'aime pas</string>
-    <string name="last_fm_send_likes_description">Aimer / Ne plus aimer des titres sur Last.fm lorsqu\'ils sont aimés / retirés dans echomusic</string>
+    <string name="last_fm_send_likes_description">Aimer / Ne plus aimer des titres sur Last.fm lorsqu\'ils sont aimés / retirés dans FT Music</string>
     <string name="logging_in">Connexion en cours…</string>
 
     <string name="scrobbling_configuration">Configuration du scrobbling</string>
@@ -481,19 +481,18 @@
     <string name="wrapped_total_artists_subtitle">artistes uniques</string>
     <string name="wrapped_total_songs_title">Vous avez écouté</string>
     <string name="wrapped_total_songs_subtitle">titres uniques</string>
-    <string name="wrapped_intro_title">echomusic</string>
+    <string name="wrapped_intro_title">FT Music</string>
     <string name="wrapped_intro_subtitle">il est temps de découvrir ce que vous avez écouté</string>
     <string name="wrapped_intro_button">c\'est parti !</string>
-    <string name="wrapped_end_thanks">Merci d\'avoir écouté avec echomusic !</string>
+    <string name="wrapped_end_thanks">Merci d\'avoir écouté avec FT Music !</string>
     <string name="wrapped_end_create_playlist">Créer votre playlist Rétrospective</string>
     <string name="wrapped_end_creating_playlist">Création en cours...</string>
     <string name="wrapped_end_playlist_saved">Playlist enregistrée</string>
-    <string name="wrapped_logo_content_description">Logo echomusic</string>
+    <string name="wrapped_logo_content_description">Logo FT Music</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">VOTRE RÉTROSPECTIVE EST PRÊTE !</string>
     <string name="wrapped_ready_subtitle">Il est temps de revoir ce que vous avez adoré cette année.</string>
     <string name="wrapped_thank_you">Merci pour votre écoute</string>
-    <string name="wrapped_special_thanks">Un remerciement spécial à echodh pour la création d\'echomusic</string>
     <string name="wrapped_close">Fermer la rétrospective</string>
     <string name="wrapped_playlist_title">Votre rétrospective %s</string>
     <string name="wrapped_create_playlist">Créer la playlist</string>
@@ -550,7 +549,7 @@
     <string name="eq_preset_dirac_game">Dirac Jeu</string>
     <string name="eq_enable_title">Égaliseur</string>
     <string name="eq_enable_summary">Basculer le traitement audio professionnel</string>
-    <string name="eq_label_echo">Signature Echo</string>
+    <string name="eq_label_echo">Signature FT Music</string>
     <string name="eq_label_dolby">Dolby Atmos</string>
     <string name="eq_label_dirac">Audio Dirac</string>
     <string name="eq_reset">Réinitialiser</string>
@@ -568,9 +567,9 @@
     <string name="plays">écoutes</string>
     <string name="casting_to">Diffusion sur %s</string>
     <string name="progress_percent">Progression %s%%</string>
-    <string name="listening_to_echomusic">Écoute sur echomusic</string>
+    <string name="listening_to_echomusic">Écoute sur FT Music</string>
     <string name="listen_on_youtube_music">Écouter sur YouTube Music</string>
-    <string name="visit_echomusic">Visiter echomusic</string>
+    <string name="visit_echomusic">Visiter FT Music</string>
     <string name="open">Ouvrir</string>
     <string name="failed_to_create_image">Échec de la création de l\'image : %s</string>
     <string name="copied_title">Titre copié</string>
@@ -587,35 +586,35 @@
     <!-- Chaînes des Widgets -->
     <string name="album_art">Pochette d\'album</string>
     <string name="no_song_playing">Aucun titre en cours de lecture</string>
-    <string name="tap_to_open">Appuyez pour ouvrir echomusic</string>
+    <string name="tap_to_open">Appuyez pour ouvrir FT Music</string>
     <string name="previous">Précédent</string>
     <string name="play_pause">Lecture/Pause</string>
     <string name="next">Suivant</string>
     <string name="like">J\'aime</string>
     <string name="not_playing">Aucun titre en cours de lecture</string>
-    <string name="tap_to_play">Appuyez pour ouvrir echomusic</string>
+    <string name="tap_to_play">Appuyez pour ouvrir FT Music</string>
     <string name="widget_description">Widget de lecteur de musique avec commandes de lecture</string>
     <string name="queue_widget_description">Lecteur de musique avec aperçu de la file d\'attente</string>
     <string name="turntable_widget_description">Widget musical circulaire avec commandes de lecture et de j\'aime</string>
-    <string name="widget_music_player">Echo Classique (4×1)</string>
-    <string name="widget_turntable">Tourne-disque Echo Classique (2×2)</string>
+    <string name="widget_music_player">FT Music Classique (4×1)</string>
+    <string name="widget_turntable">Tourne-disque FT Music Classique (2×2)</string>
     <string name="widget_modern_name">FT Moderne (4×2)</string>
     <string name="widget_modern_desc">Lecteur élégant avec barre de progression, favoris et commandes de bibliothèque</string>
     <string name="widget_device_name">FT Stream (4×2)</string>
     <string name="widget_device_desc">Carte moderne affichant l\'appareil de lecture actif et la sortie audio</string>
     <string name="widget_square_name">FT Compact (2×2)</string>
     <string name="widget_square_desc">Lecteur carré minimaliste avec des commandes lumineuses et dynamiques</string>
-    <string name="widget_showcase_name">Echo Vitrine (4×4)</string>
+    <string name="widget_showcase_name">FT Music Vitrine (4×4)</string>
     <string name="widget_showcase_desc">Grande carte mettant en valeur la pochette d\'album avec un en-tête dédié</string>
-    <string name="widget_slim_name">Echo Pilule (4×1)</string>
+    <string name="widget_slim_name">FT Music Pilule (4×1)</string>
     <string name="widget_slim_desc">Bande horizontale ultra-compacte avec la progression de la lecture en direct</string>
-    <string name="widget_vinyl_name">Disque Vinyle Echo (Carré)</string>
+    <string name="widget_vinyl_name">Disque Vinyle FT Music (Carré)</string>
     <string name="widget_vinyl_desc">Tourne-disque vinyle réaliste en rotation avec bras de lecture et verre dépoli sombre</string>
-    <string name="widget_aurora_name">Echo Studio Aurore (4×2)</string>
+    <string name="widget_aurora_name">FT Music Studio Aurore (4×2)</string>
     <string name="widget_aurora_desc">Carte au style verre dépoli avec paroles synchronisées, sélecteur d\'appareil et commandes lumineuses</string>
-    <string name="widget_vintage_name">Tourne-disque Rétro Echo (4×2)</string>
+    <string name="widget_vintage_name">Tourne-disque Rétro FT Music (4×2)</string>
     <string name="widget_vintage_desc">Tourne-disque rétro chaleureux effet parchemin avec disque vinyle en rotation et détails chocolat</string>
-    <string name="widget_adaptive_name">Lecteur Adaptatif Echo</string>
+    <string name="widget_adaptive_name">Lecteur Adaptatif FT Music</string>
     <string name="widget_adaptive_desc">Lecteur adaptatif 2-en-1 qui s\'agrandit pour afficher la file d\'attente des morceaux à venir</string>
     <string name="widget_queue_empty">Aucun morceau à venir</string>
 
@@ -798,7 +797,7 @@
     <string name="crash_share_logs">Partager les journaux</string>
     <string name="copy_logs">Copier les journaux</string>
     <string name="crash_share_title">Partager le rapport de plantage</string>
-    <string name="crash_report_subject">Rapport de plantage echomusic</string>
+    <string name="crash_report_subject">Rapport de plantage FT Music</string>
     <string name="crash_close">Fermer</string>
     <string name="crash_no_log">Aucun journal de plantage disponible</string>
 
@@ -889,9 +888,9 @@
     <string name="discord_rpc_preview">Aperçu Rich Presence</string>
     <string name="discord_presence">Présence</string>
     <string name="discord_connect_description">Connectez-vous avec Discord pour partager ce que vous écoutez</string>
-    <string name="discord_playing_echomusic">Joue à echomusic</string>
-    <string name="discord_watching_echomusic">Regarde echomusic</string>
-    <string name="discord_competing_echomusic">En compétition sur echomusic</string>
+    <string name="discord_playing_echomusic">Joue à FT Music</string>
+    <string name="discord_watching_echomusic">Regarde FT Music</string>
+    <string name="discord_competing_echomusic">En compétition sur FT Music</string>
     <string name="discord_activity_name">Nom de l\'activité</string>
     <string name="discord_activity_name_description">Nom personnalisé pour l\'activité (laisser vide par défaut)</string>
     <string name="discord_advanced_mode">Mode avancé</string>
@@ -950,7 +949,7 @@
 
     <string name="perm_required">Requis</string>
     <string name="perm_permissions">Autorisations</string>
-    <string name="perm_intro_text">Ces autorisations sont nécessaires pour que echomusic fonctionne correctement. Veuillez les accorder pour continuer.</string>
+    <string name="perm_intro_text">Ces autorisations sont nécessaires pour que FT Music fonctionne correctement. Veuillez les accorder pour continuer.</string>
 
     <string name="perm_notif_title">Notifications</string>
     <string name="perm_notif_desc">Sachez immédiatement quand votre musique est lue et contrôlez-la depuis la barre de notification.</string>
@@ -960,7 +959,7 @@
 
     <string name="feat_discover">Découvrir</string>
     <string name="feat_features">Fonctionnalités</string>
-    <string name="feat_intro">Explorez tout ce que echomusic a à offrir pour votre expérience musicale.</string>
+    <string name="feat_intro">Explorez tout ce que FT Music a à offrir pour votre expérience musicale.</string>
 
     <string name="feat_lyrics_title">Paroles intelligentes</string>
     <string name="feat_lyrics_desc">Profitez de paroles synchronisées mot à mot pour des millions de chansons.</string>
@@ -984,7 +983,7 @@
     <string name="welcome_update_status">À jour</string>
     <string name="welcome_update_intro">Assurez-vous de disposer des dernières fonctionnalités et améliorations de sécurité.</string>
     <string name="welcome_checking_updates">Vérification des mises à jour…</string>
-    <string name="welcome_up_to_date">echomusic est à jour !</string>
+    <string name="welcome_up_to_date">FT Music est à jour !</string>
     <string name="welcome_update_available">Une nouvelle version est disponible : %s</string>
     <string name="welcome_everything_ready">Tout est maintenant à jour</string>
     <string name="commits_title">Commits</string>
@@ -1048,7 +1047,7 @@
     <string name="local_songs_no_matches_desc">Essayez un autre nom de chanson, d\'artiste ou d\'album.</string>
 
     <!-- Widget de reconnaissance musicale -->
-    <string name="widget_recognizer_name">Reconnaissance Echo (1×1)</string>
+    <string name="widget_recognizer_name">Reconnaissance FT Music (1×1)</string>
     <string name="widget_recognizer_description">Identifiez les chansons jouées autour de vous directement depuis votre écran d\'accueil</string>
     <string name="widget_recognizer_tap_to_search">Appuyez pour identifier une chanson</string>
     <string name="widget_recognizer_listening">Écoute en cours…</string>
@@ -1062,7 +1061,7 @@
     <string name="widget_recognizer_channel_name">Reconnaissance musicale</string>
     <string name="widget_recognizer_channel_desc">Affiche une notification pendant l\'identification d\'une chanson depuis le widget</string>
     <string name="widget_recognizer_notification_text">Enregistrement audio pour identifier la chanson…</string>
-    <string name="widget_playlists">Playlists Echo (4×2)</string>
+    <string name="widget_playlists">Playlists FT Music (4×2)</string>
     <string name="widget_playlists_description">Raccourcis de playlists avec commandes du mini-lecteur</string>
 
     <string name="choose_something_below">Choisissez une option ci-dessous</string>

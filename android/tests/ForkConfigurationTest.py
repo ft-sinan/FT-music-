@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fast, offline checks for FT Music's Echo fork configuration."""
 from pathlib import Path
+import re
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -23,9 +24,27 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('GNU GENERAL PUBLIC LICENSE', (ROOT / "LICENSE").read_text())
         self.assertIn('c0de840532aadc36a84475b63291fbc6452a1668', (ROOT / "UPSTREAM.md").read_text())
         about = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AboutScreen.kt").read_text()
-        self.assertIn("GPLv3 · Based on Echo Music", about)
-        self.assertIn("https://github.com/EchoMusicApp/Echo-Music", about)
+        self.assertIn("GPLv3 · No warranty", about)
         self.assertIn("https://github.com/ft-sinan/FT-music-", about)
+        self.assertNotIn('Text("Original Echo Music project")', about)
+        self.assertIn("Echo Music", (ROOT / "UPSTREAM.md").read_text())
+        self.assertIn("https://github.com/EchoMusicApp/Echo-Music", (ROOT / "UPSTREAM.md").read_text())
+
+    def test_visible_ft_branding_and_official_share_links(self):
+        # Check translated string values, not internal resource names or retained source notices.
+        old_brand = re.compile(r"(?i)(?<![a-z])(echomusic|echo(?:[-\s]+music)?)(?![a-z])")
+        for resource in (MAIN / "res").glob("values*/*.xml"):
+            for element in ET.parse(resource).getroot():
+                if element.tag not in {"string", "string-array", "plurals"}:
+                    continue
+                self.assertNotRegex("".join(element.itertext()), old_brand, str(resource))
+        creator = (MAIN / "kotlin/com/music/echo/ui/screens/settings/CreatorSpace.kt").read_text()
+        about = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AboutScreen.kt").read_text()
+        self.assertNotIn('"Built on Echo Music', creator)
+        self.assertNotIn('"Echo Music creator"', about)
+        ytitems = (ROOT / "innertube/src/main/kotlin/com/music/innertube/models/YTItem.kt").read_text()
+        self.assertIn("https://music.youtube.com/watch?v=$id", ytitems)
+        self.assertNotIn("share.echomusic.fun", ytitems)
 
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())

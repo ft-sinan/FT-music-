@@ -432,9 +432,9 @@
     <string name="listenbrainz_scrobbling">ListenBrainz ஸ்க்ராப்ளிங்</string>
     <string name="listenbrainz_scrobbling_description">நீங்கள் கேட்ட பாடல்களை ListenBrainz க்குத் தானாகச் சமர்ப்பிக்கும்</string>
     <string name="set_listenbrainz_token">ListenBrainz டோக்கனை அமை</string>
-    <string name="youtube_decryption_settings">Echo Extractor</string>
+    <string name="youtube_decryption_settings">YouTube Extractor</string>
     <string name="youtube_decryption_desc">பிரித்தெடுப்பான் அமைப்புகளை உள்ளமை</string>
-    <string name="youtube_decryption_support">Echo Extractor</string>
+    <string name="youtube_decryption_support">YouTube Extractor</string>
     <string name="youtube_decryption_support_desc">YouTube இயக்க உள்ளமைவுகளைத் தானாகப் பிரித்தெடுக்கும். செயலில் இருக்கும் நிலையில் பூட்டப்பட்டுள்ளது.</string>
     <string name="force_update_cipher">உள்ளமைவுகளை வலுக்கட்டாயமாகப் புதுப்பி</string>
     <string name="force_update_cipher_desc">சமீபத்திய பிரித்தெடுப்பான் மேலெழுதல் வரைபடங்களைப் பதிவிறக்கு. நாளொன்றுக்கு 3 புதுப்பிப்புகள் மட்டுமே அனுமதிக்கப்படும்.</string>

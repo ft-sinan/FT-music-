@@ -485,7 +485,7 @@ object WrappedShareHelper {
     }
     canvas.drawText("${data.uniqueSongsCount} SONGS PLAYED", marginX, trioY, statTrioPaint)
     canvas.drawText("${data.uniqueArtistsCount} ARTISTS DISCOVERED", marginX + 330f, trioY, statTrioPaint)
-    canvas.drawText("ECHO MUSIC", marginX + 710f, trioY, statTrioAccentPaint)
+    canvas.drawText("FT MUSIC", marginX + 710f, trioY, statTrioAccentPaint)
 
     // 8. Watermark Footer
     val footerPaint = Paint().apply {
@@ -497,7 +497,7 @@ object WrappedShareHelper {
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     canvas.drawText(
-      "CRAFTED WITH ECHO MUSIC • ${data.yearLabel} REPLAY • echomusic.app/wrapped",
+      "CRAFTED WITH FT MUSIC • ${data.yearLabel} REPLAY",
       width / 2f,
       1750f,
       footerPaint
@@ -509,11 +509,11 @@ object WrappedShareHelper {
         ComposeToImage.saveBitmapAsFile(
           context = context,
           bitmap = bitmap,
-          fileName = "Echo_Wrapped_${data.yearLabel}_${System.currentTimeMillis()}"
+          fileName = "FT_Music_Replay_${data.yearLabel}_${System.currentTimeMillis()}"
         )
       } catch (_: Exception) {
         val cachePath = java.io.File(context.cacheDir, "images").apply { mkdirs() }
-        val imageFile = java.io.File(cachePath, "Echo_Wrapped_${System.currentTimeMillis()}.png")
+        val imageFile = java.io.File(cachePath, "FT_Music_Replay_${System.currentTimeMillis()}.png")
         java.io.FileOutputStream(imageFile).use { out ->
           bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         }

@@ -341,7 +341,9 @@ fun AlbumMenu(
                     type = "text/plain"
                     putExtra(
                       Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/playlist?list=${album.album.playlistId}"
+                      album.album.playlistId?.takeIf { it.isNotBlank() }
+                        ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+                        ?: album.album.title
                     )
                   }
                 context.startActivity(Intent.createChooser(intent, null))

@@ -30,7 +30,10 @@ class WidgetLyricsTest {
 
   @Test
   fun timedInstrumentalGapDoesNotRepeatOldWords() {
-    val lyrics = WidgetLyrics.Timed(listOf(WidgetLyrics.Line(1000, "Verse"), WidgetLyrics.Line(2000, "")))
+    val lyrics = WidgetLyrics.parse("[00:01.00]Verse\n[00:02.00]\n[00:04.00]Chorus") as WidgetLyrics.Timed
+    assertEquals("Verse", lyrics.at(1000).current)
     assertEquals("", lyrics.at(2000).current)
+    assertEquals("Chorus", lyrics.at(2000).next)
+    assertEquals("Chorus", lyrics.at(4000).current)
   }
 }

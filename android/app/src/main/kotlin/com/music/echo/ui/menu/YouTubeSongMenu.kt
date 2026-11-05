@@ -77,6 +77,7 @@ import echo.music.iad1tya.ui.component.ListDialog
 import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
+import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
@@ -100,6 +101,7 @@ fun YouTubeSongMenu(
   showSongHeader: Boolean = true,
 ) {
   val context = LocalContext.current
+  val loadAnimationItem = rememberLoadAnimationItem(song.toMediaMetadata(), onDismiss)
   var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
   if (showShareDialog) {
     SongShareDialog(mediaId = song.id, onDismiss = {
@@ -366,6 +368,10 @@ fun YouTubeSongMenu(
         columns = 3,
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
       )
+    }
+
+    item {
+      Material3MenuGroup(items = listOf(loadAnimationItem))
     }
 
     item {

@@ -165,9 +165,7 @@ import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
-import echo.music.iad1tya.applecanvas.AppleMusicCanvasProvider
 import echo.music.iad1tya.canvas.CanvasArtwork
-import echo.music.iad1tya.canvas.TidalCanvasProvider
 import echo.music.iad1tya.constants.AudioQuality
 import echo.music.iad1tya.constants.AudioQualityKey
 import echo.music.iad1tya.constants.CanvasThumbnailAnimationKey
@@ -196,7 +194,6 @@ import echo.music.iad1tya.db.entities.LyricsEntity
 import echo.music.iad1tya.echomusic.getConnectedBluetoothDeviceName
 import echo.music.iad1tya.echomusic.isBuds
 import echo.music.iad1tya.echomusic.isSpeaker
-import echo.music.iad1tya.echomusiccanvas.echomusicCanvasProvider
 import echo.music.iad1tya.extensions.SwipeGesture
 import echo.music.iad1tya.extensions.togglePlayPause
 import echo.music.iad1tya.models.MediaMetadata
@@ -225,7 +222,6 @@ import echo.music.iad1tya.utils.makeTimeString
 import echo.music.iad1tya.utils.rememberEnumPreference
 import echo.music.iad1tya.utils.rememberPreference
 import java.io.File
-import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -333,7 +329,10 @@ fun BottomSheetPlayer(
   val dataSaverEnabled by
     rememberPreference(key = echo.music.iad1tya.constants.DataSaverEnabledKey, defaultValue = false)
   val enableCanvasPref by rememberPreference(CanvasThumbnailAnimationKey, false)
-  val enableCanvas = if (dataSaverEnabled) false else enableCanvasPref
+  val manualCanvas = rememberManualCanvas(mediaMetadata?.id)?.takeIf { selection ->
+    mediaMetadata?.let { canvasMatches(it, selection.artwork) } == true
+  }
+  val enableCanvas = !dataSaverEnabled && (enableCanvasPref || manualCanvas != null)
 
   val shouldUseDarkButtonColors =
     remember(playerBackground, useDarkTheme) {
@@ -652,72 +651,45 @@ fun BottomSheetPlayer(
   var canvasArtwork by remember(mediaMetadata?.id) { mutableStateOf<CanvasArtwork?>(null) }
 
   // Restart the lookup when the animation or Data Saver setting changes.
-  LaunchedEffect(mediaMetadata?.id, playerBackground, enableCanvas) {
+  LaunchedEffect(mediaMetadata?.id, playerBackground, enableCanvas, manualCanvas) {
     if (playerBackground != PlayerBackgroundStyle.APPLE_MUSIC || !enableCanvas) {
       canvasArtwork = null
       return@LaunchedEffect
     }
     val item = mediaMetadata ?: return@LaunchedEffect
+    manualCanvas?.let {
+      canvasArtwork = it.artwork
+      return@LaunchedEffect
+    }
 
-    CanvasArtworkPlaybackCache.get(item.id)?.let { cached ->
+    CanvasArtworkPlaybackCache.get(item.id)?.let(::safeCanvasUrls)
+      ?.takeIf { canvasMatches(item, it) }?.let { cached ->
+        canvasArtwork = cached
+        return@LaunchedEffect
+      }
+
+    // Older Canvas cache entries use media IDs as filenames. Only read simple IDs;
+    // local content URIs must never become paths under the app's files directory.
+    val cached = withContext(Dispatchers.IO) {
+      if (!item.id.matches(Regex("[A-Za-z0-9_-]{1,128}"))) return@withContext null
+      try {
+        val file = File(context.filesDir, "canvas_${item.id}.json")
+        if (!file.isFile || file.length() !in 1L..65_536L) return@withContext null
+        safeCanvasUrls(Json.decodeFromString<CanvasArtwork>(file.readText()))
+          ?.takeIf { canvasMatches(item, it) }
+      } catch (_: Exception) {
+        null
+      }
+    }
+    if (cached != null) {
+      CanvasArtworkPlaybackCache.put(item.id, cached)
       canvasArtwork = cached
       return@LaunchedEffect
     }
 
-    try {
-      val file = File(context.filesDir, "canvas_${item.id}.json")
-      if (file.exists()) {
-        val cached = Json.decodeFromString<echo.music.iad1tya.canvas.CanvasArtwork>(file.readText())
-        CanvasArtworkPlaybackCache.put(item.id, cached)
-        canvasArtwork = cached
-        return@LaunchedEffect
-      }
-    } catch (e: Exception) {
-      e.printStackTrace()
-    }
-
-    withContext(Dispatchers.IO) {
-      val storefront =
-        Locale.getDefault().country.lowercase(Locale.ROOT).takeIf { it.length == 2 } ?: "us"
-      val requestedTitle = item.title
-      val requestedArtist = item.artists.joinToString { it.name }
-      val requestedAlbum = item.album?.title ?: ""
-
-      val s = normalizeCanvasSongTitle(requestedTitle)
-      val a = normalizeCanvasArtistName(requestedArtist)
-
-      val fetched =
-        echomusicCanvasProvider.getBySongArtist(s, a)?.takeIf {
-          !it.preferredAnimationUrl.isNullOrBlank()
-        }
-          ?: TidalCanvasProvider.getBySongArtist(s, a, requestedAlbum)?.takeIf {
-            !it.preferredAnimationUrl.isNullOrBlank()
-          }
-          ?: AppleMusicCanvasProvider.getBySongArtist(s, a, requestedAlbum, storefront)?.takeIf {
-            !it.preferredAnimationUrl.isNullOrBlank()
-          }
-
-      val validated =
-        fetched?.let { artwork ->
-          val localArtists = splitAndNormalizeArtists(requestedArtist)
-          val returnedArtists = splitAndNormalizeArtists(artwork.artist ?: "")
-          val artistMatches =
-            localArtists.isNotEmpty() &&
-              returnedArtists.isNotEmpty() &&
-              (localArtists.any { local ->
-                returnedArtists.any { it.equals(local, ignoreCase = true) }
-              })
-
-          if (artistMatches) artwork else null
-        }
-
-      withContext(Dispatchers.Main) {
-        canvasArtwork = validated
-        if (validated != null) {
-          CanvasArtworkPlaybackCache.put(item.id, validated)
-        }
-      }
-    }
+    val found = searchManualCanvas(item)
+    canvasArtwork = found
+    if (found != null) CanvasArtworkPlaybackCache.put(item.id, found)
   }
 
   val (textButtonColor, iconButtonColor) =
@@ -1278,6 +1250,10 @@ fun BottomSheetPlayer(
                         fallbackUrl = canvasArtwork?.videoUrl,
                         isPlaying = isPlaying,
                         fitWideArtwork = true,
+                        retryGeneration = manualCanvas?.generation ?: 0L,
+                        onPlaybackFailure = if (manualCanvas != null) ({
+                          Toast.makeText(context, R.string.animation_playback_failed, Toast.LENGTH_LONG).show()
+                        }) else null,
                         modifier = Modifier.fillMaxSize()
                       )
                     }
