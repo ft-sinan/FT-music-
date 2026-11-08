@@ -276,6 +276,40 @@ class DownloadQualityInstrumentedTest {
     assertTrue(!sources.hasRecord(id))
   }
 
+  @Test fun chooserChoiceIsLockedBeforeTheRequestIsQueued() = runBlocking {
+    val downloadUtil = createUtil()
+    val second = "$id-2"
+    val sent = mutableListOf<DownloadRequest>()
+    downloadUtil.sendAddDownload = { sent += it }
+    try {
+      context.dataStore.edit { it[DownloadQualityKey] = DownloadQuality.HIGH.name }
+      assertTrue(!downloadUtil.hasLockedQuality(id))
+      val items =
+        listOf(DownloadChooserItem(id, "FT Title"), DownloadChooserItem(second, "Second Title"))
+      // The chooser locks what the user picked, not what the saved preference happens to say.
+      assertEquals(0, downloadUtil.enqueue(items, DownloadQuality.DATA_SAVER))
+      assertEquals(listOf(id, second), sent.map { it.id })
+      assertEquals(listOf(id, second), sent.map { it.cacheKey })
+      assertEquals(listOf("FT Title", "Second Title"), sent.map { String(it.data!!) })
+      assertEquals(DownloadQuality.DATA_SAVER, sources.qualityFor(id, DownloadQuality.HIGH))
+      assertTrue(downloadUtil.hasLockedQuality(id))
+      // A queue failure is reported rather than leaving the user guessing.
+      sent.clear()
+      downloadUtil.sendAddDownload = { throw IllegalStateException("service unavailable") }
+      assertEquals(
+        1,
+        downloadUtil.enqueue(listOf(DownloadChooserItem(second, "Second Title")), DownloadQuality.HIGH),
+      )
+      assertTrue(sent.isEmpty())
+      assertEquals(
+        context.getString(echo.music.iad1tya.R.string.ft_download_queue_failed),
+        downloadUtil.downloadQueueProblem.value,
+      )
+    } finally {
+      sources.remove(second)
+    }
+  }
+
   @Test fun sourceFollowsPreferenceAndNeverUsesUnqualifiedStreamingCache() = runBlocking {
     cacheBytes(playerCache, ByteArray(high.size) { 0x55 })
     val qualities = Collections.synchronizedList(mutableListOf<AudioQuality>())

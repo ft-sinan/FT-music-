@@ -994,7 +994,18 @@
     <string name="ft_download_quality_high_desc">Prefers the best available source audio. The actual bitrate and codec depend on the source.</string>
     <string name="ft_download_quality_saver">Data saver</string>
     <string name="ft_download_quality_saver_desc">Prefers a smaller source stream when available.</string>
-    <string name="ft_download_quality_applies">Applies when a download starts. Existing downloads stay as they are.</string>
+    <string name="ft_download_quality_applies">Used for downloads that start automatically, such as Auto-download on like. Tapping Download offers the available formats each time. Existing downloads stay as they are.</string>
     <string name="ft_download_restart_needed">This unfinished download cannot safely resume. In the song menu, remove the failed download, then download it again.</string>
     <string name="ft_remove_failed_download">Remove failed download</string>
+    <string name="ft_download_chooser_title">Choose a download format</string>
+    <string name="ft_download_chooser_title_multiple">Choose a format for %1$d songs</string>
+    <string name="ft_download_chooser_loading">Finding available formats…</string>
+    <string name="ft_download_chooser_suggested">Suggested</string>
+    <string name="ft_download_chooser_size_unknown">Size unknown</string>
+    <string name="ft_download_chooser_multiple_note">Sizes are from %1$s. The same choice applies to all %2$d songs.</string>
+    <string name="ft_download_chooser_unavailable">%1$s is not available for this song.</string>
+    <string name="ft_download_chooser_locked_note">An unfinished download keeps the format it was started with.</string>
+    <string name="ft_download_chooser_no_options">No downloadable audio format was found for this song. Nothing was queued.</string>
+    <string name="ft_download_chooser_lookup_failed">Available formats could not be loaded. Check your connection and try again. Nothing was queued.</string>
+    <string name="ft_download_queue_failed">The download could not be queued. Try again.</string>
 </resources>

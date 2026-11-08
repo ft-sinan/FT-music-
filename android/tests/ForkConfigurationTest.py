@@ -193,6 +193,104 @@ class ForkConfigurationTest(unittest.TestCase):
         for menu in ("PlayerMenu.kt", "OldPlayerMenu.kt"):
             self.assertNotIn("Song DNA", (MAIN / "kotlin/com/music/echo/ui/menu" / menu).read_text())
 
+    def test_every_download_tap_offers_formats_before_queueing(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        util = (playback / "DownloadUtil.kt").read_text()
+        chooser = (playback / "DownloadChooser.kt").read_text()
+        discovery = (playback / "DownloadOptionDiscovery.kt").read_text()
+        activity = (MAIN / "kotlin/com/music/echo/MainActivity.kt").read_text()
+        # One queueing path: no screen or service builds a download request any more.
+        offenders = [
+            str(path.relative_to(MAIN))
+            for path in (MAIN / "kotlin").rglob("*.kt")
+            if "sendAddDownload" in path.read_text() and path.name != "DownloadUtil.kt"
+        ]
+        self.assertEqual([], offenders)
+        # Every download entry point asks through the chooser instead.
+        entry_points = [
+            path for path in (MAIN / "kotlin").rglob("*.kt")
+            if re.search(r"(downloadChooser|chooser)\.request\(", path.read_text())
+        ]
+        self.assertGreaterEqual(len(entry_points), 19)
+        for path in entry_points:
+            source = path.read_text()
+            self.assertTrue(
+                "import echo.music.iad1tya.LocalDownloadChooser" in source
+                or "chooser: DownloadChooserController" in source,
+                str(path.relative_to(MAIN)),
+            )
+        # Menus are bottom-sheet windows, so they close and the chooser is the only dialog shown.
+        for path in entry_points:
+            relative = str(path.relative_to(MAIN))
+            if "ui/menu/" not in relative and "ui/screens/playlist/" not in relative:
+                continue
+            lines = path.read_text().split("\n")
+            for index, line in enumerate(lines):
+                if not re.search(r"(downloadChooser|chooser)\.request\(", line):
+                    continue
+                following = "\n".join(lines[index + 1:index + 4])
+                self.assertTrue(
+                    "onDismiss()" in following
+                    or "menuState.dismiss()" in following
+                    or "clearAction()" in following,
+                    f"{relative}:{index + 1}",
+                )
+        # The dialog is hosted once, next to the other playback prompts.
+        self.assertIn("LocalDownloadChooser provides downloadChooser", activity)
+        self.assertIn("DownloadChooserDialog(downloadChooser)", activity)
+        self.assertIn("@Inject lateinit var downloadChooser: DownloadChooserController", activity)
+        # Opening the chooser is read-only: no queueing and no source lock during discovery.
+        self.assertNotIn("sendAddDownload", discovery + chooser)
+        self.assertNotIn("qualityFor", discovery + chooser)
+        # The chosen format is locked before the request reaches the download service.
+        self.assertLess(util.index("sourceRegistry.qualityFor(id, quality)"), util.index("sendAddDownload(request)"))
+        # A whole batch asks once, using the first song's real options.
+        self.assertEqual(1, chooser.count("queue.discover(items.first().id)"))
+        # Automatic downloads keep following the saved setting.
+        self.assertIn("downloadUtil.enqueueDownload(song.id, song.title, quality)", (playback / "MusicService.kt").read_text())
+        # A device file has no YouTube formats, so it is copied as the old button did.
+        self.assertIn("pending.partition { queue.isLocalMedia(it.id) }", chooser)
+        self.assertIn("queue.enqueue(local, queue.savedQuality())", chooser)
+        self.assertIn("override fun isLocalMedia(id: String): Boolean = id.isLocalMediaId()", util)
+        self.assertIn("override fun savedQuality(): DownloadQuality = downloadQuality.canonical()", util)
+
+    def test_download_chooser_reports_only_real_formats_and_sizes(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        dialog = (MAIN / "kotlin/com/music/echo/ui/component/DownloadChooserDialog.kt").read_text()
+        chooser = (playback / "DownloadChooser.kt").read_text()
+        strings = ET.parse(MAIN / "res/values/strings.xml").getroot()
+        values = {element.get("name"): "".join(element.itertext()) for element in strings}
+        for name in (
+            "ft_download_chooser_title",
+            "ft_download_chooser_title_multiple",
+            "ft_download_chooser_loading",
+            "ft_download_chooser_suggested",
+            "ft_download_chooser_size_unknown",
+            "ft_download_chooser_multiple_note",
+            "ft_download_chooser_unavailable",
+            "ft_download_chooser_locked_note",
+            "ft_download_chooser_no_options",
+            "ft_download_chooser_lookup_failed",
+            "ft_download_queue_failed",
+        ):
+            self.assertIn(name, values)
+            self.assertIn("R.string." + name, dialog + chooser + (playback / "DownloadUtil.kt").read_text(), name)
+        # Nothing is promised to be lossless, and no format is invented.
+        self.assertNotRegex(dialog + chooser, re.compile(r"(?i)flac|lossless"))
+        # An unknown size stays unknown instead of being estimated.
+        self.assertIn("?: unknownSize", dialog)
+        self.assertEqual(values["ft_download_chooser_size_unknown"], "Size unknown")
+        # No file-size ceiling: large formats are offered like any other.
+        self.assertNotRegex(dialog + chooser, re.compile(r"15\s*(_|\*)?\s*(000|1024)|MAX_DOWNLOAD_SIZE"))
+        # A missing format and a failed lookup are both reported, never silently queued.
+        self.assertIn("DownloadChooserFailure.NO_AUDIO_FORMAT", dialog + chooser)
+        self.assertIn("DownloadChooserFailure.LOOKUP_FAILED", dialog + chooser)
+        self.assertIn("Nothing was queued", values["ft_download_chooser_no_options"])
+        self.assertIn("Nothing was queued", values["ft_download_chooser_lookup_failed"])
+        # YouTube High is the suggested choice.
+        self.assertIn("quality == DownloadQuality.HIGH", (playback / "DownloadOptionDiscovery.kt").read_text())
+        self.assertIn("option.isRecommended", dialog)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

@@ -11,7 +11,7 @@ import javax.inject.Singleton
 import org.json.JSONObject
 
 /** Identifies the representation selected for one download, not just the song. */
-internal data class DownloadSourceIdentity(
+data class DownloadSourceIdentity(
   val itag: Int?,
   val mimeType: String,
   val length: Long?,

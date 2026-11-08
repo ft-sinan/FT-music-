@@ -63,7 +63,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -73,6 +72,7 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import com.music.innertube.YouTube
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -89,6 +89,7 @@ import echo.music.iad1tya.constants.ShowLyricsOnPlayerKey
 import echo.music.iad1tya.listentogether.ConnectionState
 import echo.music.iad1tya.listentogether.ListenTogetherEvent
 import echo.music.iad1tya.models.MediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.ui.component.BottomSheetState
 import echo.music.iad1tya.ui.component.DefaultDialog
@@ -120,6 +121,7 @@ fun PlayerMenu(
 ) {
   mediaMetadata ?: return
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val loadAnimationItem = rememberLoadAnimationItem(mediaMetadata, onDismiss)
   var showShareDialog by rememberSaveable(mediaMetadata.id) { mutableStateOf(false) }
   if (showShareDialog) {
@@ -698,17 +700,9 @@ fun PlayerMenu(
                   },
                   onClick = {
                     database.transaction { insert(mediaMetadata) }
-                    val downloadRequest =
-                      DownloadRequest.Builder(mediaMetadata.id, mediaMetadata.id.toUri())
-                        .setCustomCacheKey(mediaMetadata.id)
-                        .setData(mediaMetadata.title.toByteArray())
-                        .build()
-                    DownloadService.sendAddDownload(
-                      context,
-                      ExoDownloadService::class.java,
-                      downloadRequest,
-                      false,
-                    )
+                    downloadChooser.request(DownloadChooserItem(mediaMetadata.id, mediaMetadata.title))
+                    // Close the sheet so the chooser is the only dialog on screen.
+                    onDismiss()
                   }
                 )
               }

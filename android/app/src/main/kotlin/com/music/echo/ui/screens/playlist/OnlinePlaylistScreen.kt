@@ -97,7 +97,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEachReversed
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -111,6 +110,7 @@ import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
@@ -121,6 +121,7 @@ import echo.music.iad1tya.db.entities.Playlist
 import echo.music.iad1tya.db.entities.PlaylistEntity
 import echo.music.iad1tya.db.entities.PlaylistSongMap
 import echo.music.iad1tya.models.toMediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubePlaylistQueue
 import echo.music.iad1tya.playback.queues.YouTubeQueue
@@ -576,6 +577,7 @@ private fun OnlinePlaylistHeader(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val database = LocalDatabase.current
   val menuState = LocalMenuState.current
@@ -871,19 +873,9 @@ private fun OnlinePlaylistHeader(
                 }
               }
               else -> {
-                songs.forEach { song ->
-                  val downloadRequest =
-                    DownloadRequest.Builder(song.id, song.id.toUri())
-                      .setCustomCacheKey(song.id)
-                      .setData(song.title.toByteArray())
-                      .build()
-                  DownloadService.sendAddDownload(
-                    context,
-                    ExoDownloadService::class.java,
-                    downloadRequest,
-                    false,
-                  )
-                }
+                downloadChooser.request(songs.map { DownloadChooserItem(it.id, it.title) })
+                // Close the sheet so the chooser is the only dialog on screen.
+                menuState.dismiss()
               }
             }
           },

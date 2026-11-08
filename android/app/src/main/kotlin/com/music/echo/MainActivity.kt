@@ -188,6 +188,7 @@ import echo.music.iad1tya.echomusic.updater.getUpdateNotificationsSetting
 import echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState
 import echo.music.iad1tya.extensions.toEnum
 import echo.music.iad1tya.models.toMediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserController
 import echo.music.iad1tya.playback.DownloadUtil
 import echo.music.iad1tya.playback.MusicService
 import echo.music.iad1tya.playback.MusicService.MusicBinder
@@ -280,6 +281,8 @@ class MainActivity : ComponentActivity() {
   @Inject lateinit var localTasteEngine: echo.music.iad1tya.generate.LocalTasteEngine
 
   @Inject lateinit var downloadUtil: DownloadUtil
+
+  @Inject lateinit var downloadChooser: DownloadChooserController
 
   @Inject lateinit var syncUtils: SyncUtils
 
@@ -1248,12 +1251,14 @@ class MainActivity : ComponentActivity() {
           LocalPlayerConnection provides playerConnection,
           LocalPlayerAwareWindowInsets provides playerAwareWindowInsets,
           LocalDownloadUtil provides downloadUtil,
+          LocalDownloadChooser provides downloadChooser,
           LocalShimmerTheme provides getShimmerTheme(),
           LocalSyncUtils provides syncUtils,
           LocalListenTogetherManager provides listenTogetherManager,
           LocalExpandPlayer provides expandPlayer,
         ) {
           PlaybackAndStoragePrompts(playerConnection, downloadUtil)
+          DownloadChooserDialog(downloadChooser)
           localAudioDeletion.selectedSong?.let { song ->
             LocalAudioDeleteDialog(
               song = song,
@@ -2070,6 +2075,8 @@ val LocalPlayerConnection =
 val LocalPlayerAwareWindowInsets =
   compositionLocalOf<WindowInsets> { error("No WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
+val LocalDownloadChooser =
+  staticCompositionLocalOf<DownloadChooserController> { error("No DownloadChooserController provided") }
 val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
 val LocalListenTogetherManager =
   staticCompositionLocalOf<echo.music.iad1tya.listentogether.ListenTogetherManager?> { null }

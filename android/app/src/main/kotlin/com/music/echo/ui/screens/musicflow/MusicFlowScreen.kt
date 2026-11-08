@@ -70,7 +70,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -80,6 +79,7 @@ import androidx.navigation.NavController
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalExpandPlayer
 import echo.music.iad1tya.LocalPlayerConnection
@@ -91,6 +91,8 @@ import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.db.entities.SongEntity
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.models.toSongEntity
+import echo.music.iad1tya.playback.DownloadChooserController
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.PlayerConnection
 import echo.music.iad1tya.musicflow.MusicFlowFeedError
@@ -120,6 +122,7 @@ fun MusicFlowScreen(
   viewModel: MusicFlowViewModel = hiltViewModel(),
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val database = LocalDatabase.current
   val syncUtils = LocalSyncUtils.current
@@ -248,7 +251,7 @@ fun MusicFlowScreen(
                     onAddToPlaylist = { playlistTarget = item.song },
                     onLyrics = { lyricsExpanded = true },
                     onShare = { context.shareSong(item.song) },
-                    onDownload = { toggleDownload(context, database, item.song, download?.state) },
+                    onDownload = { toggleDownload(context, database, downloadChooser, item.song, download?.state) },
                     onMore = {
                       menuState.show {
                         YouTubeSongMenu(
@@ -589,7 +592,13 @@ private fun toggleLike(database: MusicDatabase, syncUtils: SyncUtils, song: Song
   }
 }
 
-private fun toggleDownload(context: Context, database: MusicDatabase, song: SongItem, state: Int?) {
+private fun toggleDownload(
+  context: Context,
+  database: MusicDatabase,
+  chooser: DownloadChooserController,
+  song: SongItem,
+  state: Int?,
+) {
   when (state) {
     Download.STATE_COMPLETED,
     Download.STATE_QUEUED,
@@ -597,12 +606,8 @@ private fun toggleDownload(context: Context, database: MusicDatabase, song: Song
       DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, song.id, false)
     else -> {
       database.transaction { insert(song.toMediaMetadata()) }
-      val request =
-        DownloadRequest.Builder(song.id, song.id.toUri())
-          .setCustomCacheKey(song.id)
-          .setData(song.title.toByteArray())
-          .build()
-      DownloadService.sendAddDownload(context, ExoDownloadService::class.java, request, false)
+      // Offers the formats the resolver actually returned; nothing is queued before the choice.
+      chooser.request(DownloadChooserItem(song.id, song.title))
     }
   }
 }

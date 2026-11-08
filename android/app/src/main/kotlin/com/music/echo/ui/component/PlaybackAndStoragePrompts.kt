@@ -35,6 +35,7 @@ fun PlaybackAndStoragePrompts(connection: PlayerConnection?, downloads: Download
   val writePermissionNeeded by downloads.legacyWritePermissionNeeded.collectAsState()
   val problem by downloads.sharedDownloadProblem.collectAsState()
   val downloadProblem by downloads.downloadSourceProblem.collectAsState()
+  val queueProblem by downloads.downloadQueueProblem.collectAsState()
   val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     connection?.onLocalMatchPermissionResult(it)
   }
@@ -48,6 +49,12 @@ fun PlaybackAndStoragePrompts(connection: PlayerConnection?, downloads: Download
     downloadProblem?.let {
       Toast.makeText(context, it, Toast.LENGTH_LONG).show()
       downloads.downloadSourceProblem.value = null
+    }
+  }
+  LaunchedEffect(queueProblem) {
+    queueProblem?.let {
+      Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+      downloads.downloadQueueProblem.value = null
     }
   }
 

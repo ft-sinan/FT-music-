@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.generate.trackKeyOf
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -51,7 +52,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -78,6 +78,7 @@ import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.db.entities.SpeedDialItem
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.toMediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.HeartBurstIcon
@@ -110,6 +111,7 @@ fun SongMenu(
   isFromCache: Boolean = false,
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val songState = database.song(originalSong.id).collectAsState(initial = originalSong)
@@ -806,17 +808,9 @@ fun SongMenu(
                       )
                     },
                     onClick = {
-                      val downloadRequest =
-                        DownloadRequest.Builder(song.id, song.id.toUri())
-                          .setCustomCacheKey(song.id)
-                          .setData(song.song.title.toByteArray())
-                          .build()
-                      DownloadService.sendAddDownload(
-                        context,
-                        ExoDownloadService::class.java,
-                        downloadRequest,
-                        false,
-                      )
+                      downloadChooser.request(DownloadChooserItem(song.id, song.song.title))
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      onDismiss()
                     }
                   )
                 }

@@ -80,6 +80,8 @@ import echo.music.iad1tya.constants.AudioOffload
 import echo.music.iad1tya.constants.AudioQualityKey
 import echo.music.iad1tya.constants.AudioQuality
 import echo.music.iad1tya.constants.AutoDownloadOnLikeKey
+import echo.music.iad1tya.constants.DownloadQuality
+import echo.music.iad1tya.constants.DownloadQualityKey
 import echo.music.iad1tya.constants.AutoLoadMoreKey
 import echo.music.iad1tya.constants.AutoSkipNextOnErrorKey
 import echo.music.iad1tya.constants.CrossfadeDurationKey
@@ -235,6 +237,8 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   @Inject lateinit var lyricsHelper: echo.music.iad1tya.lyrics.LyricsHelper
 
   @Inject lateinit var syncUtils: echo.music.iad1tya.utils.SyncUtils
+
+  @Inject lateinit var downloadUtil: DownloadUtil
 
   @Inject lateinit var mediaLibrarySessionCallback: MediaLibrarySessionCallback
 
@@ -2280,18 +2284,14 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           syncUtils.likeSong(song)
 
           if (dataStore.get(AutoDownloadOnLikeKey, false) && song.liked) {
-
-            val downloadRequest =
-              androidx.media3.exoplayer.offline.DownloadRequest.Builder(song.id, song.id.toUri())
-                .setCustomCacheKey(song.id)
-                .setData(song.title.toByteArray())
-                .build()
-            androidx.media3.exoplayer.offline.DownloadService.sendAddDownload(
-              this@MusicService,
-              ExoDownloadService::class.java,
-              downloadRequest,
-              false
-            )
+            // An automatic download follows the saved quality setting; the chooser is only
+            // offered for an explicit Download tap. Locking happens inside enqueueDownload.
+            val quality =
+              dataStore
+                .get(DownloadQualityKey, DownloadQuality.HIGH.name)
+                .toEnum(DownloadQuality.HIGH)
+                .canonical()
+            downloadUtil.enqueueDownload(song.id, song.title, quality)
           }
         }
         currentMediaMetadata.value = player.currentMetadata

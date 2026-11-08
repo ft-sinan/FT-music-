@@ -7,7 +7,7 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 
 /** A resolved YouTube option. Never store or display its temporary signed stream URL. */
-internal data class DownloadOption(
+data class DownloadOption(
   val quality: DownloadQuality,
   val source: DownloadSourceIdentity,
   val codecs: String?,
@@ -19,7 +19,7 @@ internal data class DownloadOption(
 }
 
 /** A failed lookup is different from a source that resolved to the same option twice. */
-internal data class DownloadOptionDiscoveryResult(
+data class DownloadOptionDiscoveryResult(
   val options: List<DownloadOption>,
   val unavailable: Set<DownloadQuality>,
 )

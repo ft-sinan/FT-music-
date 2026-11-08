@@ -3,6 +3,7 @@ package echo.music.iad1tya.playback
 import android.content.Context
 import android.net.ConnectivityManager
 import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.SimpleCache
@@ -10,6 +11,8 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
 import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
@@ -35,6 +38,7 @@ import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.YTPlayerUtils
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.enumPreference
+import echo.music.iad1tya.utils.isLocalMediaId
 import java.io.IOException
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -66,6 +70,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.Dns
 import okhttp3.OkHttpClient
+import timber.log.Timber
 
 @Singleton
 class DownloadUtil
@@ -77,7 +82,7 @@ constructor(
   @DownloadCache val downloadCache: SimpleCache,
   val sharedDownloadStore: SharedDownloadStore,
   private val sourceRegistry: DownloadSourceRegistry,
-) {
+) : DownloadQueue {
   private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
   private val downloadQuality by
     enumPreference(
@@ -99,6 +104,8 @@ constructor(
   val legacyWritePermissionNeeded = MutableStateFlow(false)
   val sharedDownloadProblem = MutableStateFlow<String?>(null)
   val downloadSourceProblem = MutableStateFlow<String?>(null)
+  /** Set when a confirmed download could not be handed to the download service. */
+  val downloadQueueProblem = MutableStateFlow<String?>(null)
   val sharedDownloadBytes = MutableStateFlow(0L)
   private val publishJobs = ConcurrentHashMap<String, Job>()
   private val downloadedFlagLock = Mutex()
@@ -485,11 +492,65 @@ constructor(
     }
   }
 
+  override fun isActiveDownload(id: String): Boolean {
+    val state = downloads.value[id]?.state ?: return false
+    return state == Download.STATE_QUEUED ||
+      state == Download.STATE_DOWNLOADING ||
+      state == Download.STATE_RESTARTING ||
+      state == Download.STATE_COMPLETED
+  }
+
   /** Preview available YouTube formats without creating or altering a download. */
+  override suspend fun discover(id: String): DownloadOptionDiscoveryResult = inspectDownloadOptions(id)
+
   internal suspend fun inspectDownloadOptions(songId: String): DownloadOptionDiscoveryResult =
     kotlinx.coroutines.withContext(Dispatchers.IO) {
       discoverYouTubeDownloadOptions(songId, resolveDownloadSource)
     }
+
+  /** True when an earlier request already locked a format for this download. */
+  override fun hasLockedQuality(id: String): Boolean = sourceRegistry.hasRecord(id)
+
+  override fun isLocalMedia(id: String): Boolean = id.isLocalMediaId()
+
+  override fun savedQuality(): DownloadQuality = downloadQuality.canonical()
+
+  /** Hands a finished request to the download service. Replaceable so tests never queue for real. */
+  internal var sendAddDownload: (DownloadRequest) -> Unit =
+    { request ->
+      DownloadService.sendAddDownload(context, ExoDownloadService::class.java, request, false)
+    }
+
+  /**
+   * Locks the chosen format for [id] before queueing, so a changed setting, a restart or a newly
+   * resolved URL cannot splice a different representation into this download. An unfinished
+   * download keeps the format it was started with.
+   */
+  internal fun enqueueDownload(id: String, title: String, quality: DownloadQuality): Boolean {
+    try {
+      sourceRegistry.qualityFor(id, quality)
+    } catch (error: IOException) {
+      downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+      return false
+    }
+    val request =
+      DownloadRequest.Builder(id, id.toUri())
+        .setCustomCacheKey(id)
+        .setData(title.toByteArray())
+        .build()
+    return try {
+      sendAddDownload(request)
+      true
+    } catch (error: Exception) {
+      Timber.e(error, "Could not queue the download for $id")
+      downloadQueueProblem.value = context.getString(R.string.ft_download_queue_failed)
+      false
+    }
+  }
+
+  /** Queues a batch with one confirmed choice. Returns how many songs could not be queued. */
+  override fun enqueue(items: List<DownloadChooserItem>, quality: DownloadQuality): Int =
+    items.count { !enqueueDownload(it.id, it.title, quality) }
 
   fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }
 

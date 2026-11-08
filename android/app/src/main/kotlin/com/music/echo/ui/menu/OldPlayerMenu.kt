@@ -37,6 +37,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 
 import androidx.compose.runtime.LaunchedEffect
+import echo.music.iad1tya.LocalDownloadChooser
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.ui.component.DefaultDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.offline.Download
@@ -96,6 +97,7 @@ fun OldPlayerMenu(
 ) {
   mediaMetadata ?: return
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val loadAnimationItem = rememberLoadAnimationItem(mediaMetadata, onDismiss)
   var showShareDialog by rememberSaveable(mediaMetadata.id) { mutableStateOf(false) }
   if (showShareDialog) {
@@ -493,17 +495,7 @@ fun OldPlayerMenu(
                     },
                     onClick = {
                       database.transaction { insert(mediaMetadata) }
-                      val downloadRequest =
-                        DownloadRequest.Builder(mediaMetadata.id, mediaMetadata.id.toUri())
-                          .setCustomCacheKey(mediaMetadata.id)
-                          .setData(mediaMetadata.title.toByteArray())
-                          .build()
-                      DownloadService.sendAddDownload(
-                        context,
-                        ExoDownloadService::class.java,
-                        downloadRequest,
-                        false
-                      )
+                      downloadChooser.request(DownloadChooserItem(mediaMetadata.id, mediaMetadata.title))
                       onDismiss()
                     }
                   )

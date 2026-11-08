@@ -75,13 +75,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastSumBy
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
@@ -96,6 +96,7 @@ import echo.music.iad1tya.constants.YtmSyncKey
 import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.PlayerConnection
 import echo.music.iad1tya.playback.queues.ListQueue
@@ -604,6 +605,7 @@ private fun AutoPlaylistHeader(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
 
   val density = androidx.compose.ui.platform.LocalDensity.current
   val systemBarsTopPadding =
@@ -757,19 +759,9 @@ private fun AutoPlaylistHeader(
                       }
                     }
                     else -> {
-                      songs.forEach { song ->
-                        val downloadRequest =
-                          DownloadRequest.Builder(song.song.id, song.song.id.toUri())
-                            .setCustomCacheKey(song.song.id)
-                            .setData(song.song.title.toByteArray())
-                            .build()
-                        DownloadService.sendAddDownload(
-                          context,
-                          ExoDownloadService::class.java,
-                          downloadRequest,
-                          false,
-                        )
-                      }
+                      downloadChooser.request(songs.map { DownloadChooserItem(it.song.id, it.song.title) })
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      menuState.dismiss()
                     }
                   }
                 },

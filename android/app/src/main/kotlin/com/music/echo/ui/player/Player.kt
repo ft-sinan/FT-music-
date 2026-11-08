@@ -140,7 +140,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -161,6 +160,7 @@ import coil3.size.Size as CoilSize
 import coil3.toBitmap
 import dagger.hilt.android.EntryPointAccessors
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -198,6 +198,7 @@ import echo.music.iad1tya.echomusic.isSpeaker
 import echo.music.iad1tya.extensions.SwipeGesture
 import echo.music.iad1tya.extensions.togglePlayPause
 import echo.music.iad1tya.models.MediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.ui.component.BottomSheet
 import echo.music.iad1tya.ui.component.BottomSheetState
@@ -288,6 +289,7 @@ fun BottomSheetPlayer(
   onLyricsShown: () -> Unit = {},
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
   val menuState = LocalMenuState.current
@@ -1783,17 +1785,7 @@ fun BottomSheetPlayer(
                         }
                         else -> {
                           database.transaction { insert(meta) }
-                          val downloadRequest =
-                            DownloadRequest.Builder(meta.id, meta.id.toUri())
-                              .setCustomCacheKey(meta.id)
-                              .setData(meta.title.toByteArray())
-                              .build()
-                          DownloadService.sendAddDownload(
-                            context,
-                            ExoDownloadService::class.java,
-                            downloadRequest,
-                            false,
-                          )
+                          downloadChooser.request(DownloadChooserItem(meta.id, meta.title))
                         }
                       }
                     }
