@@ -289,7 +289,7 @@ class DownloadQualityInstrumentedTest {
       // The chooser locks what the user picked, not what the saved preference happens to say.
       assertEquals(0, downloadUtil.enqueue(items, DownloadQuality.DATA_SAVER))
       assertEquals(listOf(id, second), sent.map { it.id })
-      assertEquals(listOf(id, second), sent.map { it.cacheKey })
+      assertEquals(listOf(id, second), sent.map { it.customCacheKey })
       assertEquals(listOf("FT Title", "Second Title"), sent.map { String(it.data!!) })
       assertEquals(DownloadQuality.DATA_SAVER, sources.qualityFor(id, DownloadQuality.HIGH))
       assertTrue(downloadUtil.hasLockedQuality(id))
