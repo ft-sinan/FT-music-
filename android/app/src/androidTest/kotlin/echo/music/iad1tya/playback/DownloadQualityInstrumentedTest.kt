@@ -25,6 +25,8 @@ import echo.music.iad1tya.constants.DownloadQuality
 import echo.music.iad1tya.constants.DownloadQualityKey
 import echo.music.iad1tya.constants.DownloadWithMetadataKey
 import echo.music.iad1tya.db.InternalDatabase
+import echo.music.iad1tya.db.entities.SongEntity
+import java.time.LocalDateTime
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.utils.YTPlayerUtils.PlaybackData
 import echo.music.iad1tya.utils.dataStore
@@ -276,6 +278,33 @@ class DownloadQualityInstrumentedTest {
     assertTrue(!sources.hasRecord(id))
   }
 
+  @Test fun aSongWithNoLiveDownloadIsNeverReportedAsDownloaded() = runBlocking {
+    val stale = "$id-stale"
+    database.upsert(
+      SongEntity(
+        id = stale,
+        title = "Stale FT song",
+        duration = 1,
+        isDownloaded = true,
+        dateDownload = LocalDateTime.now(),
+      )
+    )
+    try {
+      // The library's Downloaded lists read this flag, so a stream cache must not set it.
+      assertTrue(database.downloadedSongIds().contains(stale))
+      createUtil()
+      withTimeout(15_000) {
+        while (database.downloadedSongIds().contains(stale)) delay(50)
+      }
+      val kept = database.song(stale).firstOrNull()
+      assertTrue("The song itself must be kept", kept != null)
+      assertEquals(false, kept?.song?.isDownloaded)
+      assertEquals(null, kept?.song?.dateDownload)
+    } finally {
+      database.song(stale).firstOrNull()?.song?.let { database.delete(it) }
+    }
+  }
+
   @Test fun chooserChoiceIsLockedBeforeTheRequestIsQueued() = runBlocking {
     val downloadUtil = createUtil()
     val second = "$id-2"
@@ -343,6 +372,7 @@ class DownloadQualityInstrumentedTest {
     }
     AudioServer(high, small).use { server ->
       val downloadUtil = createUtil()
+      database.upsert(SongEntity(id = id, title = "FT quality song", duration = 1))
       val qualities = Collections.synchronizedList(mutableListOf<AudioQuality>())
       downloadUtil.resolveDownloadSource = { _, quality ->
         qualities.add(quality)
@@ -370,6 +400,16 @@ class DownloadQualityInstrumentedTest {
           delay(100)
         }
       }
+      // A live completed download keeps its flag while a song without one loses it.
+      withTimeout(15_000) {
+        while (!database.downloadedSongIds().contains(id)) delay(50)
+      }
+      val stale = "$id-stale"
+      database.upsert(SongEntity(id = stale, title = "Stale FT song", duration = 1, isDownloaded = true))
+      downloadUtil.reconcileStaleDownloadedFlags()
+      assertTrue(database.downloadedSongIds().contains(id))
+      assertTrue(!database.downloadedSongIds().contains(stale))
+      database.song(stale).firstOrNull()?.song?.let { database.delete(it) }
       val spans = downloadCache.getCachedSpans(id).sortedBy { it.position }
       assertTrue(spans.isNotEmpty())
       val bytes = java.io.ByteArrayOutputStream().apply { spans.forEach { write(it.file!!.readBytes()) } }.toByteArray()

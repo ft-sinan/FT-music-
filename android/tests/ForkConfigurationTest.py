@@ -291,6 +291,45 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("quality == DownloadQuality.HIGH", (playback / "DownloadOptionDiscovery.kt").read_text())
         self.assertIn("option.isRecommended", dialog)
 
+    def test_cached_songs_are_never_reported_as_downloaded(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        util = (playback / "DownloadUtil.kt").read_text()
+        service = " ".join((playback / "MusicService.kt").read_text().split())
+        cached = (MAIN / "kotlin/com/music/echo/viewmodels/CachePlaylistViewModel.kt").read_text()
+        dao = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/db/DatabaseDao.kt").read_text()
+        # Streaming writes only to the temporary cache; the download cache is read-only there.
+        self.assertIn(".setCache(downloadCache)", service)
+        self.assertIn(".setCacheWriteDataSinkFactory(null)", service)
+        self.assertIn(".setCache(playerCache)", service)
+        # The Cached list is what is left after real downloads are removed from it.
+        self.assertIn("cachedIds.subtract(downloadedIds)", cached)
+        # The stored flag is reconciled against the live download list on start.
+        self.assertIn('@Query("SELECT id FROM song WHERE isDownloaded = 1")', dao)
+        self.assertIn("fun downloadedSongIds(): List<String>", dao)
+        self.assertIn("reconcileStaleDownloadedFlags()", util)
+        self.assertIn(
+            "filterNot { id -> downloads.value[id]?.state == Download.STATE_COMPLETED }", util
+        )
+        # Only a completed download ever sets the flag the Downloaded lists read.
+        self.assertIn("current?.state == Download.STATE_COMPLETED", util)
+
+    def test_downloads_keep_their_real_container_and_mp3_stays_on_demand(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        store = (playback / "SharedDownloadStore.kt").read_text()
+        names = (playback / "SharedDownloadNames.kt").read_text()
+        exporter = (playback / "AudioExportService.kt").read_text()
+        menus = (MAIN / "kotlin/com/music/echo/ui/menu/SongMenu.kt").read_text()
+        # Publishing copies the downloaded bytes; it never re-encodes them.
+        self.assertNotIn("FFmpeg", store)
+        self.assertNotIn("libmp3lame", store)
+        self.assertIn("SharedDownloadNames.extension(mime)", store)
+        self.assertIn('"audio/webm", "video/webm" -> "webm"', names)
+        self.assertIn('"audio/mp4", "audio/x-m4a", "video/mp4" -> "m4a"', names)
+        # MP3 remains an explicit, separate export action.
+        self.assertIn("libmp3lame", exporter)
+        self.assertIn("enableExportAsMp3", menus)
+
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

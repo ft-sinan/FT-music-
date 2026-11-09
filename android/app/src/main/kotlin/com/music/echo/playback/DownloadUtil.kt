@@ -125,6 +125,29 @@ constructor(
     }
   }
 
+  /**
+   * Clears the stored "downloaded" flag for songs that no longer have a live completed download.
+   *
+   * The flag drives every Downloaded list in the app, but it is only rewritten when the download
+   * manager reports a change. If a record disappears while the app is not running - removed
+   * externally, or its cache cleared - the song would otherwise stay listed as downloaded forever,
+   * even when all that remains is a temporary streaming cache. Startup is the only moment the live
+   * list is known to be complete, so the reconciliation happens here and never guesses: a song is
+   * only cleared when the manager has no completed record for it.
+   */
+  internal suspend fun reconcileStaleDownloadedFlags() {
+    val flagged =
+      try {
+        database.downloadedSongIds()
+      } catch (error: Exception) {
+        Timber.w(error, "Could not read the stored download flags")
+        return
+      }
+    flagged
+      .filterNot { id -> downloads.value[id]?.state == Download.STATE_COMPLETED }
+      .forEach { id -> syncDownloadedFlag(id) }
+  }
+
   fun requestLegacyWritePermission() {
     permissionPromptDismissed = false
     if (sharedDownloadStore.requiresLegacyPermission()) legacyWritePermissionNeeded.value = true
@@ -462,6 +485,7 @@ constructor(
 
     scope.launch(Dispatchers.IO) {
       result.keys.forEach { id -> syncDownloadedFlag(id) }
+      reconcileStaleDownloadedFlags()
     }
 
     // Wi-Fi-only downloads: DownloadManager pauses queued downloads whenever the
