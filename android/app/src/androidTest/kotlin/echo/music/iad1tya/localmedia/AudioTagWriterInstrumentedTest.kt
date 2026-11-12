@@ -173,13 +173,21 @@ class AudioTagWriterInstrumentedTest {
   /**
    * From Android 10 on, MediaStore derives these columns from the file's own tags, so the row only
    * changes once the re-scan FT Music asks for has finished. That is asynchronous.
+   *
+   * Returns the title MediaStore ended up reporting rather than a yes/no, so a failure says what it
+   * actually saw. The budget is generous on purpose: an emulator running a whole instrumentation
+   * suite, several of whose tests transcode audio with ffmpeg, can take far longer to finish a scan
+   * than the 8 seconds this originally allowed - an API 28 run failed on that while the identical
+   * commit passed on the slower-free run before it. Waiting longer cannot hide a real regression;
+   * if MediaStore never adopts the tag the title stays wrong and this still reports it.
    */
-  private suspend fun awaitMediaStoreTitle(uri: Uri, expected: String): Boolean {
-    repeat(32) {
-      if (mediaStoreTitle(uri) == expected) return true
+  private suspend fun awaitMediaStoreTitle(uri: Uri, expected: String): String? {
+    repeat(120) {
+      val title = mediaStoreTitle(uri)
+      if (title == expected) return title
       kotlinx.coroutines.delay(250)
     }
-    return mediaStoreTitle(uri) == expected
+    return mediaStoreTitle(uri)
   }
 
   private fun mediaStoreTitle(uri: Uri): String? = runCatching {
@@ -301,9 +309,14 @@ class AudioTagWriterInstrumentedTest {
 
     // FT Music's own library must agree with the file, and MediaStore must on the releases
     // where FT Music can write that column itself.
-    val settled = awaitMediaStoreTitle(fixture.uri, "Midnight City")
+    val reportedTitle = awaitMediaStoreTitle(fixture.uri, "Midnight City")
     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-      assertTrue("MediaStore still reports the old title", settled)
+      assertEquals(
+        "MediaStore did not adopt the new title on a release where FT Music writes that column " +
+          "itself",
+        "Midnight City",
+        reportedTitle,
+      )
     }
     val song = database.getSongById(fixture.songId)
     assertNotNull(song)
