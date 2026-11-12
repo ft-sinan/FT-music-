@@ -158,6 +158,9 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("0x00000040", verify)
         self.assertIn("ARCHIVE_SIGNING_FLAGS = 0x08000040", verify)
         self.assertIn("pinnedDigestAmong(digests) != null", verify)
+        # A case-insensitive match has to hand back the canonical constant, not whatever casing the
+        # device reported, so a caller comparing it literally is not quietly broken.
+        self.assertIn("digests.any { PINNED_SIGNING_CERT_SHA256.equals(it, ignoreCase = true) }", verify)
         self.assertIn("if (!downloadVerified && !signatureUnreadable)", screen)
         self.assertIn("SignatureMatch.DIFFERENT ->", screen)
         self.assertIn("if (expectedSha256 != null)", worker)

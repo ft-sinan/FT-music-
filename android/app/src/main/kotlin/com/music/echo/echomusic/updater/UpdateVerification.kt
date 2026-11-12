@@ -176,15 +176,21 @@ private fun archivePackageInfo(context: Context, file: File): PackageInfo? {
 }
 
 /**
- * The pinned digest when it is one of the reported signers, otherwise null.
+ * FT Music's pinned digest when it is one of the reported signers, otherwise null.
  *
  * Signature ordering is documented as not guaranteed, and a rotated certificate reports its
  * history, so the pinned digest is looked for among the signers rather than assumed to be the first
- * one. Anything else is a different signer. Pure, so the decision that gates an install can be
- * tested without an Android runtime.
+ * one. Anything else is a different signer. The comparison ignores case, because the signing script
+ * lowercases while a device might not, and the canonical constant is what comes back so a caller
+ * never has to normalise it. Pure, so the decision that gates an install can be tested without an
+ * Android runtime.
  */
 fun pinnedDigestAmong(digests: List<String>): String? =
-  digests.firstOrNull { PINNED_SIGNING_CERT_SHA256.equals(it, ignoreCase = true) }
+  if (digests.any { PINNED_SIGNING_CERT_SHA256.equals(it, ignoreCase = true) }) {
+    PINNED_SIGNING_CERT_SHA256
+  } else {
+    null
+  }
 
 /** Every certificate digest this package reports, through whichever field the device filled in. */
 fun archiveSignerDigests(info: PackageInfo): List<String> {
