@@ -3,14 +3,16 @@ package echo.music.iad1tya.playback
 import android.content.Context
 import android.net.ConnectivityManager
 import androidx.core.content.getSystemService
+import androidx.core.net.toUri
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.datasource.ResolvingDataSource
-import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Requirements
 import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
@@ -29,13 +31,15 @@ import echo.music.iad1tya.db.entities.FormatEntity
 import echo.music.iad1tya.db.entities.LyricsEntity
 import echo.music.iad1tya.db.entities.SongEntity
 import echo.music.iad1tya.di.DownloadCache
-import echo.music.iad1tya.di.PlayerCache
+import echo.music.iad1tya.R
 import echo.music.iad1tya.lyrics.LyricsProviderRegistry
 import echo.music.iad1tya.lyrics.LyricsUtils
 import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.YTPlayerUtils
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.enumPreference
+import echo.music.iad1tya.utils.isLocalMediaId
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
@@ -66,6 +70,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.Dns
 import okhttp3.OkHttpClient
+import timber.log.Timber
 
 @Singleton
 class DownloadUtil
@@ -75,24 +80,32 @@ constructor(
   val database: MusicDatabase,
   val databaseProvider: DatabaseProvider,
   @DownloadCache val downloadCache: SimpleCache,
-  @PlayerCache val playerCache: SimpleCache,
   val sharedDownloadStore: SharedDownloadStore,
-) {
+  private val sourceRegistry: DownloadSourceRegistry,
+) : DownloadQueue {
   private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
   private val downloadQuality by
     enumPreference(
       context,
       DownloadQualityKey,
-      DownloadQuality.YOUTUBE
+      DownloadQuality.HIGH
     )
   private val ipVersion by enumPreference(context, IpVersionKey, IpVersion.AUTO)
   private val songUrlCache = ConcurrentHashMap<String, ResolvedStream>()
+
+  // Injectable in instrumented tests so cache isolation can be exercised without YouTube access.
+  @Volatile internal var resolveDownloadSource: suspend (String, AudioQuality) -> YTPlayerUtils.PlaybackData = { id, quality ->
+    YTPlayerUtils.playerResponseForPlayback(id, audioQuality = quality, connectivityManager = connectivityManager).getOrThrow()
+  }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   val downloads = MutableStateFlow<Map<String, Download>>(emptyMap())
   val legacyWritePermissionNeeded = MutableStateFlow(false)
   val sharedDownloadProblem = MutableStateFlow<String?>(null)
+  val downloadSourceProblem = MutableStateFlow<String?>(null)
+  /** Set when a confirmed download could not be handed to the download service. */
+  val downloadQueueProblem = MutableStateFlow<String?>(null)
   val sharedDownloadBytes = MutableStateFlow(0L)
   private val publishJobs = ConcurrentHashMap<String, Job>()
   private val downloadedFlagLock = Mutex()
@@ -110,6 +123,29 @@ constructor(
       } else null
       database.updateDownloadedInfo(id, isComplete, date)
     }
+  }
+
+  /**
+   * Clears the stored "downloaded" flag for songs that no longer have a live completed download.
+   *
+   * The flag drives every Downloaded list in the app, but it is only rewritten when the download
+   * manager reports a change. If a record disappears while the app is not running - removed
+   * externally, or its cache cleared - the song would otherwise stay listed as downloaded forever,
+   * even when all that remains is a temporary streaming cache. Startup is the only moment the live
+   * list is known to be complete, so the reconciliation happens here and never guesses: a song is
+   * only cleared when the manager has no completed record for it.
+   */
+  internal suspend fun reconcileStaleDownloadedFlags() {
+    val flagged =
+      try {
+        database.downloadedSongIds()
+      } catch (error: Exception) {
+        Timber.w(error, "Could not read the stored download flags")
+        return
+      }
+    flagged
+      .filterNot { id -> downloads.value[id]?.state == Download.STATE_COMPLETED }
+      .forEach { id -> syncDownloadedFlag(id) }
   }
 
   fun requestLegacyWritePermission() {
@@ -177,41 +213,33 @@ constructor(
     }
   }
 
-  private val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
+  internal val dataSourceFactory: androidx.media3.datasource.DataSource.Factory =
     ResolvingDataSource.Factory(
       ChunkingDataSourceFactory(
-        // Read already-streamed bytes from playerCache instead of re-downloading them:
-        // a song played before being downloaded would otherwise be fetched twice.
-        CacheDataSource.Factory()
-          .setCache(playerCache)
-          .setUpstreamDataSourceFactory(
-            OkHttpDataSource.Factory(
-              OkHttpClient.Builder()
-                .dns(
-                  object : Dns {
-                    override fun lookup(hostname: String): List<InetAddress> {
-                      val addresses = Dns.SYSTEM.lookup(hostname)
-                      return when (this@DownloadUtil.ipVersion) {
-                        IpVersion.IPV4 ->
-                          addresses.filter { it is Inet4Address }.ifEmpty { addresses }
-                        IpVersion.IPV6 ->
-                          addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                        IpVersion.AUTO -> addresses
-                      }
-                    }
+        // Streaming cache is keyed only by song ID and may contain a different format.
+        // DownloadManager writes into downloadCache itself; fetch its misses directly.
+        OkHttpDataSource.Factory(
+          OkHttpClient.Builder()
+            .dns(
+              object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                  val addresses = Dns.SYSTEM.lookup(hostname)
+                  return when (this@DownloadUtil.ipVersion) {
+                    IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
+                    IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
+                    IpVersion.AUTO -> addresses
                   }
-                )
-                .proxy(YouTube.proxy)
-                .proxyAuthenticator { _, response ->
-                  YouTube.proxyAuth?.let { auth ->
-                    response.request.newBuilder().header("Proxy-Authorization", auth).build()
-                  } ?: response.request
                 }
-                .build(),
+              }
             )
-          )
-          .setCacheWriteDataSinkFactory(null)
-          .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .proxy(YouTube.proxy)
+            .proxyAuthenticator { _, response ->
+              YouTube.proxyAuth?.let { auth ->
+                response.request.newBuilder().header("Proxy-Authorization", auth).build()
+              } ?: response.request
+            }
+            .build(),
+        )
       )
     ) { dataSpec ->
       // If this is a Canvas request (e.g., Apple Music or Tidal), bypass YouTube resolution!
@@ -227,22 +255,32 @@ constructor(
 
       val mediaId = dataSpec.key ?: error("No media id")
 
-      songUrlCache["${mediaId}_${downloadQuality.name}"]
+      // Lock the setting and selected format for the lifetime of this download. In
+      // particular, a later setting change or a newly resolved URL must not splice
+      // a different representation into already-downloaded bytes.
+      val quality = try {
+        sourceRegistry.qualityFor(mediaId, downloadQuality)
+      } catch (error: IOException) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw error
+      }
+      songUrlCache[mediaId]
         ?.takeIf { it.expiresAtMs > System.currentTimeMillis() }
-        ?.let {
-          return@Factory it.resolve(dataSpec)
-        }
+        ?.let { return@Factory it.resolve(dataSpec) }
 
-      val playbackData =
-        runBlocking(Dispatchers.IO) {
-            YTPlayerUtils.playerResponseForPlayback(
-              videoId = mediaId,
-              audioQuality = AudioQuality.AUTO,
-              connectivityManager = connectivityManager
-            )
-          }
-          .getOrThrow()
+      val playbackData = runBlocking(Dispatchers.IO) { resolveDownloadSource(mediaId, quality.resolverQuality()) }
       val format = playbackData.format
+      val source = DownloadSourceIdentity.from(playbackData.streamUrl, format.itag, format.mimeType, format.contentLength)
+      val accepted = try {
+        sourceRegistry.acceptSource(mediaId, source, downloadCache.getCachedSpans(mediaId).isNotEmpty())
+      } catch (error: IOException) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw error
+      }
+      if (!accepted) {
+        downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+        throw IOException("The unfinished download cannot safely resume with this source")
+      }
 
       database.query {
         upsert(
@@ -251,7 +289,7 @@ constructor(
             itag = format.itag,
             mimeType = format.mimeType.split(";")[0],
             codecs =
-              format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "opus",
+              format.mimeType.split("codecs=").getOrNull(1)?.removeSurrounding("\"") ?: "unknown",
             bitrate = format.bitrate,
             sampleRate = format.audioSampleRate,
             contentLength = format.contentLength ?: 0L,
@@ -353,7 +391,7 @@ constructor(
       }
 
       val stream = ResolvedStream.from(playbackData)
-      songUrlCache["${mediaId}_${downloadQuality.name}"] = stream
+      songUrlCache[mediaId] = stream
       stream.resolve(dataSpec)
     }
 
@@ -408,6 +446,12 @@ constructor(
               val id = download.request.id
               publishJobs.remove(id)?.cancel()
               downloads.update { it - id }
+              songUrlCache.remove(id)
+              try {
+                sourceRegistry.remove(id)
+              } catch (error: IOException) {
+                downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+              }
               sharedDownloadStore.markRemovalPending(id)
               scope.launch {
                 syncDownloadedFlag(id)
@@ -429,11 +473,19 @@ constructor(
         result[cursor.download.request.id] = cursor.download
       }
     }
+    // A process can die after Media3 removed a download but before its callback
+    // cleared the identity. Do this before the manager can start new work.
+    try {
+      sourceRegistry.prune(result.keys)
+    } catch (_: IOException) {
+      downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+    }
     downloads.value = result
     refreshSharedDownloads()
 
     scope.launch(Dispatchers.IO) {
       result.keys.forEach { id -> syncDownloadedFlag(id) }
+      reconcileStaleDownloadedFlags()
     }
 
     // Wi-Fi-only downloads: DownloadManager pauses queued downloads whenever the
@@ -444,11 +496,85 @@ constructor(
         .map { it[DownloadOnWifiOnlyKey] ?: false }
         .distinctUntilChanged()
         .collectLatest { wifiOnly ->
-          downloadManager.requirements =
-            Requirements(if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK)
+          // Media3 requires all DownloadManager access on its application looper.
+          // Updating the watcher on IO can race a download/release on the main thread.
+          kotlinx.coroutines.withContext(Dispatchers.Main) {
+            downloadManager.requirements =
+              Requirements(if (wifiOnly) Requirements.NETWORK_UNMETERED else Requirements.NETWORK)
+          }
         }
     }
   }
+
+  internal suspend fun copyPrivateDownloadForSharing(id: String): SharedDownloadStore.TemporaryShareCopy? {
+    val original = downloads.value[id] ?: return null
+    return sharedDownloadStore.copyPrivateForSharing(original) {
+      val current = downloads.value[id]
+      current != null && current.state == Download.STATE_COMPLETED &&
+        current.startTimeMs == original.startTimeMs && current.updateTimeMs == original.updateTimeMs &&
+        current.request.uri == original.request.uri
+    }
+  }
+
+  override fun isActiveDownload(id: String): Boolean {
+    val state = downloads.value[id]?.state ?: return false
+    return state == Download.STATE_QUEUED ||
+      state == Download.STATE_DOWNLOADING ||
+      state == Download.STATE_RESTARTING ||
+      state == Download.STATE_COMPLETED
+  }
+
+  /** Preview available YouTube formats without creating or altering a download. */
+  override suspend fun discover(id: String): DownloadOptionDiscoveryResult = inspectDownloadOptions(id)
+
+  internal suspend fun inspectDownloadOptions(songId: String): DownloadOptionDiscoveryResult =
+    kotlinx.coroutines.withContext(Dispatchers.IO) {
+      discoverYouTubeDownloadOptions(songId, resolveDownloadSource)
+    }
+
+  /** True when an earlier request already locked a format for this download. */
+  override fun hasLockedQuality(id: String): Boolean = sourceRegistry.hasRecord(id)
+
+  override fun isLocalMedia(id: String): Boolean = id.isLocalMediaId()
+
+  override fun savedQuality(): DownloadQuality = downloadQuality.canonical()
+
+  /** Hands a finished request to the download service. Replaceable so tests never queue for real. */
+  internal var sendAddDownload: (DownloadRequest) -> Unit =
+    { request ->
+      DownloadService.sendAddDownload(context, ExoDownloadService::class.java, request, false)
+    }
+
+  /**
+   * Locks the chosen format for [id] before queueing, so a changed setting, a restart or a newly
+   * resolved URL cannot splice a different representation into this download. An unfinished
+   * download keeps the format it was started with.
+   */
+  internal fun enqueueDownload(id: String, title: String, quality: DownloadQuality): Boolean {
+    try {
+      sourceRegistry.qualityFor(id, quality)
+    } catch (error: IOException) {
+      downloadSourceProblem.value = context.getString(R.string.ft_download_restart_needed)
+      return false
+    }
+    val request =
+      DownloadRequest.Builder(id, id.toUri())
+        .setCustomCacheKey(id)
+        .setData(title.toByteArray())
+        .build()
+    return try {
+      sendAddDownload(request)
+      true
+    } catch (error: Exception) {
+      Timber.e(error, "Could not queue the download for $id")
+      downloadQueueProblem.value = context.getString(R.string.ft_download_queue_failed)
+      false
+    }
+  }
+
+  /** Queues a batch with one confirmed choice. Returns how many songs could not be queued. */
+  override fun enqueue(items: List<DownloadChooserItem>, quality: DownloadQuality): Int =
+    items.count { !enqueueDownload(it.id, it.title, quality) }
 
   fun getDownload(songId: String): Flow<Download?> = downloads.map { it[songId] }
 

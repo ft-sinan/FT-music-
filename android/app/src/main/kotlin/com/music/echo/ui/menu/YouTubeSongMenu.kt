@@ -1,7 +1,6 @@
 package echo.music.iad1tya.ui.menu
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -45,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
@@ -54,6 +52,7 @@ import coil3.compose.AsyncImage
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -72,11 +71,14 @@ import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.models.toSongEntity
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
+import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
@@ -100,6 +102,15 @@ fun YouTubeSongMenu(
   showSongHeader: Boolean = true,
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
+  val loadAnimationItem = rememberLoadAnimationItem(song.toMediaMetadata(), onDismiss)
+  var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
+  if (showShareDialog) {
+    SongShareDialog(mediaId = song.id, onDismiss = {
+      showShareDialog = false
+      onDismiss()
+    })
+  }
   val database = LocalDatabase.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val librarySong by database.song(song.id).collectAsState(initial = null)
@@ -352,20 +363,17 @@ fun YouTubeSongMenu(
               },
               text = stringResource(R.string.share),
               onClick = {
-                val intent =
-                  Intent().apply {
-                    action = Intent.ACTION_SEND
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, song.shareLink)
-                  }
-                context.startActivity(Intent.createChooser(intent, null))
-                onDismiss()
+                showShareDialog = true
               }
             )
           ),
         columns = 3,
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
       )
+    }
+
+    item {
+      Material3MenuGroup(items = listOf(loadAnimationItem))
     }
 
     item {
@@ -585,23 +593,32 @@ fun YouTubeSongMenu(
                   },
                   onClick = {
                     database.transaction { insert(song.toMediaMetadata()) }
-                    val downloadRequest =
-                      DownloadRequest.Builder(song.id, song.id.toUri())
-                        .setCustomCacheKey(song.id)
-                        .setData(song.title.toByteArray())
-                        .build()
-                    DownloadService.sendAddDownload(
-                      context,
-                      ExoDownloadService::class.java,
-                      downloadRequest,
-                      false,
-                    )
+                    downloadChooser.request(DownloadChooserItem(song.id, song.title))
+                    // Close the sheet so the chooser is the only dialog on screen.
+                    onDismiss()
                   }
                 )
               }
             }
           )
       )
+    }
+
+    // A failed partial can be retried normally, or explicitly removed when its
+    // old source cannot be safely resumed after an update or format change.
+    if (download?.state == Download.STATE_FAILED) {
+      item { Spacer(modifier = Modifier.height(12.dp)) }
+      item {
+        Material3MenuGroup(
+          items = listOf(
+            Material3MenuItemData(
+              title = { Text(stringResource(R.string.ft_remove_failed_download)) },
+              icon = { Icon(painter = painterResource(R.drawable.delete), contentDescription = null) },
+              onClick = { DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, song.id, false) }
+            )
+          )
+        )
+      }
     }
 
     if (enableExportAsMp3) {

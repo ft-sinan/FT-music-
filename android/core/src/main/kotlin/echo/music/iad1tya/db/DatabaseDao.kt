@@ -1188,6 +1188,14 @@ interface DatabaseDao {
   @Query("UPDATE song SET isDownloaded = :downloaded, dateDownload = :date WHERE id = :songId")
   fun updateDownloadedInfo(songId: String, downloaded: Boolean, date: LocalDateTime?)
 
+  /**
+   * Ids the library still reports as downloaded. A download record can disappear while the app is
+   * not running, so these are reconciled against the live download list on start; a temporary
+   * streaming cache is never a download.
+   */
+  @Query("SELECT id FROM song WHERE isDownloaded = 1")
+  fun downloadedSongIds(): List<String>
+
   @Transaction
   @Query("SELECT * FROM song WHERE isUploaded = 1 ORDER BY dateDownload")
   fun uploadedSongsByCreateDateAsc(): Flow<List<Song>>
@@ -1703,6 +1711,9 @@ interface DatabaseDao {
   @Upsert fun upsert(map: SongAlbumMap)
 
   @Upsert fun upsert(lyrics: LyricsEntity)
+
+  // A background widget lookup must never replace lyrics the user has edited.
+  @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertLyricsIfAbsent(lyrics: LyricsEntity)
 
   @Upsert fun upsert(format: FormatEntity)
 

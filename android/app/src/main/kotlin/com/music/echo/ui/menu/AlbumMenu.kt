@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.media3.exoplayer.offline.Download.STATE_COMPLETED
 import androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING
 import androidx.media3.exoplayer.offline.Download.STATE_QUEUED
@@ -62,6 +61,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.music.innertube.YouTube
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -72,6 +72,7 @@ import echo.music.iad1tya.db.entities.Album
 import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.db.entities.SpeedDialItem
 import echo.music.iad1tya.extensions.toMediaItem
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.ui.component.AlbumListItem
@@ -93,6 +94,7 @@ fun AlbumMenu(
   onDismiss: () -> Unit,
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val downloadUtil = LocalDownloadUtil.current
   val playerConnection = LocalPlayerConnection.current ?: return
@@ -341,7 +343,9 @@ fun AlbumMenu(
                     type = "text/plain"
                     putExtra(
                       Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/playlist?list=${album.album.playlistId}"
+                      album.album.playlistId?.takeIf { it.isNotBlank() }
+                        ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+                        ?: album.album.title
                     )
                   }
                 context.startActivity(Intent.createChooser(intent, null))
@@ -480,19 +484,9 @@ fun AlbumMenu(
                     Icon(painter = painterResource(R.drawable.download), contentDescription = null)
                   },
                   onClick = {
-                    songs.forEach { song ->
-                      val downloadRequest =
-                        DownloadRequest.Builder(song.id, song.id.toUri())
-                          .setCustomCacheKey(song.id)
-                          .setData(song.song.title.toByteArray())
-                          .build()
-                      DownloadService.sendAddDownload(
-                        context,
-                        ExoDownloadService::class.java,
-                        downloadRequest,
-                        false,
-                      )
-                    }
+                    downloadChooser.request(songs.map { DownloadChooserItem(it.id, it.song.title) })
+                    // Close the sheet so the chooser is the only dialog on screen.
+                    onDismiss()
                   }
                 )
               }

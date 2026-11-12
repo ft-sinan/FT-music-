@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ft_lyrics_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="14dp"
+    android:background="@drawable/widget_ft_glass_bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:id="@+id/widget_album_art"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:src="@mipmap/ic_launcher"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/album_art" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/widget_song_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/not_playing"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+            <TextView
+                android:id="@+id/widget_artist_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/widget_open_ft_music"
+                android:textColor="#C8FFFFFF"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+        <ImageView
+            android:id="@+id/widget_cast_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_widget_cast_white"
+            android:contentDescription="@string/widget_cast" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_lyrics_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/widget_lyrics_unavailable"
+        android:textColor="#B9FFFFFF"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+    <LinearLayout
+        android:id="@+id/widget_lyrics_area"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/widget_lyrics_current"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/widget_open_ft_music"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:maxLines="2"
+            android:ellipsize="end" />
+        <TextView
+            android:id="@+id/widget_lyrics_next"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#B9FFFFFF"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="4dp">
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/widget_progress_track_modern"
+            android:scaleType="fitXY"
+            android:contentDescription="@null" />
+        <ImageView
+            android:id="@+id/widget_progress_fill"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:src="@drawable/widget_progress_clip_modern"
+            android:scaleType="fitXY"
+            android:contentDescription="@null" />
+    </FrameLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/widget_time_current"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0:00"
+            android:textColor="#B9FFFFFF"
+            android:textSize="10sp" />
+        <TextView
+            android:id="@+id/widget_time_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0:00"
+            android:textColor="#B9FFFFFF"
+            android:textSize="10sp" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <ImageView
+            android:id="@+id/widget_like_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_widget_heart_clean"
+            android:contentDescription="@string/like" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+        <ImageView
+            android:id="@+id/widget_prev_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_widget_skip_prev_white"
+            android:contentDescription="@string/previous" />
+        <FrameLayout
+            android:id="@+id/widget_play_pause_container"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@drawable/widget_circle_play_accent_bg">
+            <ImageView
+                android:id="@+id/widget_play_pause"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_widget_play_bold_white"
+                android:contentDescription="@string/play_pause" />
+        </FrameLayout>
+        <ImageView
+            android:id="@+id/widget_next_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_widget_skip_next_white"
+            android:contentDescription="@string/next" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+    </LinearLayout>
+</LinearLayout>

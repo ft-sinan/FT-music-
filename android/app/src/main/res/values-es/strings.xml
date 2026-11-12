@@ -433,7 +433,7 @@
     <string name="restore_failed">Error al restaurar la copia de seguridad</string>
 
     <string name="discord_integration">Integración con Discord</string>
-    <string name="discord_information">echomusic utiliza la biblioteca KizzyRPC para actualizar el estado de tu cuenta de Discord. Esto implica conectarse a Discord Gateway, lo cual podría considerarse una infracción de los Términos de Servicio de Discord. Sin embargo, no se conocen casos de cuentas suspendidas por este motivo. Úsalo bajo tu propia responsabilidad.\n\nechomusic solo extraerá tu token y todo lo demás se guarda localmente.</string>
+    <string name="discord_information">FT Music utiliza la biblioteca KizzyRPC para actualizar el estado de tu cuenta de Discord. Esto implica conectarse a Discord Gateway, lo cual podría considerarse una infracción de los Términos de Servicio de Discord. Sin embargo, no se conocen casos de cuentas suspendidas por este motivo. Úsalo bajo tu propia responsabilidad.\n\nFT Music solo extraerá tu token y todo lo demás se guarda localmente.</string>
     <string name="dismiss">Descartar</string>
     <string name="options">Opciones</string>
     <string name="preview">Vista previa</string>
@@ -514,9 +514,9 @@
     <string name="set_listenbrainz_token">Configurar token de ListenBrainz</string>
 
     <!-- Echo Extractor Settings -->
-    <string name="youtube_decryption_settings">Echo Extractor</string>
+    <string name="youtube_decryption_settings">YouTube Extractor</string>
     <string name="youtube_decryption_desc">Configurar ajustes del extractor</string>
-    <string name="youtube_decryption_support">Echo Extractor</string>
+    <string name="youtube_decryption_support">YouTube Extractor</string>
     <string name="youtube_decryption_support_desc">Extrae automáticamente las configuraciones de reproducción de YouTube. Fijado en Activo.</string>
     <string name="force_update_cipher">Forzar actualización de configuraciones</string>
     <string name="force_update_cipher_desc">Descarga las asignaciones más recientes del extractor. Limitado a 3 actualizaciones por día.</string>
@@ -841,7 +841,7 @@
     <string name="scrobble_delay_minutes_desc">Tiempo en minutos necesario antes de hacer scrobble</string>
     <string name="ai_recommendations_refresh_desc">Actualiza las recomendaciones generadas por IA</string>
     <string name="last_updated_desc">Fecha de la última actualización de datos</string>
-    <string name="youtube_decryption_settings_desc">Gestiona los ajustes de Echo Extractor</string>
+    <string name="youtube_decryption_settings_desc">Gestiona los ajustes de YouTube Extractor</string>
     <string name="refresh_desc">Actualizar información</string>
     <string name="activity_status_desc">Gestiona la visualización del estado de actividad</string>
     <string name="platform_status_desc">Muestra el estado de los servicios y plataformas</string>

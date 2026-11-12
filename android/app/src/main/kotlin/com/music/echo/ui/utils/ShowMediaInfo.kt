@@ -210,7 +210,7 @@ fun ShowMediaInfo(videoId: String) {
           ) {
             InfoItem(
               label = stringResource(R.string.song_info_itag_label),
-              value = currentFormat?.itag?.toString() ?: "N/A",
+              value = currentFormat?.itag?.takeIf { it > 0 }?.toString() ?: "N/A",
               modifier = Modifier.weight(1f)
             )
             InfoItem(
@@ -227,13 +227,13 @@ fun ShowMediaInfo(videoId: String) {
             InfoItem(
               label = stringResource(R.string.mime_type),
               value =
-                currentFormat?.mimeType?.substringBefore(";")
-                  ?: stringResource(R.string.song_info_standard),
+                currentFormat?.mimeType?.substringBefore(";")?.takeIf { it.isNotBlank() }
+                  ?: "N/A",
               modifier = Modifier.weight(1f)
             )
             InfoItem(
               label = stringResource(R.string.bitrate),
-              value = currentFormat?.bitrate?.let { "${it / 1000} Kbps" } ?: "N/A",
+              value = currentFormat?.bitrate?.takeIf { it > 0 }?.let { "${it / 1000} Kbps" } ?: "N/A",
               modifier = Modifier.weight(1f)
             )
           }
@@ -244,12 +244,12 @@ fun ShowMediaInfo(videoId: String) {
           ) {
             InfoItem(
               label = stringResource(R.string.codecs),
-              value = currentFormat?.codecs ?: "N/A",
+              value = currentFormat?.codecs?.takeIf { it.isNotBlank() && it != "unknown" } ?: "N/A",
               modifier = Modifier.weight(1f)
             )
             InfoItem(
               label = stringResource(R.string.sample_rate),
-              value = currentFormat?.sampleRate?.let { "$it Hz" } ?: "N/A",
+              value = currentFormat?.sampleRate?.takeIf { it > 0 }?.let { "$it Hz" } ?: "N/A",
               modifier = Modifier.weight(1f)
             )
           }
@@ -261,7 +261,7 @@ fun ShowMediaInfo(videoId: String) {
             InfoItem(
               label = stringResource(R.string.file_size),
               value =
-                currentFormat?.contentLength?.let { Formatter.formatShortFileSize(context, it) }
+                currentFormat?.contentLength?.takeIf { it > 0 }?.let { Formatter.formatShortFileSize(context, it) }
                   ?: "N/A",
               modifier = Modifier.weight(1f)
             )

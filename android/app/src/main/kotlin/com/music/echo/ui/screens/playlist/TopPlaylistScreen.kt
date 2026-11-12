@@ -74,13 +74,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastSumBy
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
@@ -88,6 +88,7 @@ import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.MyTopFilter
 import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.extensions.toMediaItem
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.ui.component.DefaultDialog
@@ -508,6 +509,7 @@ private fun TopPlaylistHeader(
 ) {
   val playerConnection = LocalPlayerConnection.current ?: return
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
 
   Column(
     modifier = modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
@@ -653,19 +655,9 @@ private fun TopPlaylistHeader(
                       }
                     }
                     else -> {
-                      songs.forEach { song ->
-                        val downloadRequest =
-                          DownloadRequest.Builder(song.id, song.id.toUri())
-                            .setCustomCacheKey(song.id)
-                            .setData(song.title.toByteArray())
-                            .build()
-                        DownloadService.sendAddDownload(
-                          context,
-                          ExoDownloadService::class.java,
-                          downloadRequest,
-                          false,
-                        )
-                      }
+                      downloadChooser.request(songs.map { DownloadChooserItem(it.id, it.title) })
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      menuState.dismiss()
                     }
                   }
                 },

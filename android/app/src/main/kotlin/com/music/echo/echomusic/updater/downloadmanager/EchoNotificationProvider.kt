@@ -4,6 +4,7 @@ import android.app.Notification
 import android.content.Context
 import android.os.Bundle
 import androidx.annotation.OptIn
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
@@ -21,12 +22,24 @@ class EchoNotificationProvider(
 ) : MediaNotification.Provider {
 
   private val defaultProvider =
-    DefaultMediaNotificationProvider(
+    object : DefaultMediaNotificationProvider(
       context,
       notificationIdProvider,
       channelId,
       channelNameResourceId
-    )
+    ) {
+      override fun addNotificationActions(
+        mediaSession: MediaSession,
+        mediaButtons: ImmutableList<CommandButton>,
+        builder: NotificationCompat.Builder,
+        actionFactory: MediaNotification.ActionFactory,
+      ): IntArray {
+        // Ask System UI for its artwork-matched media treatment. Android still owns the
+        // shade layout, action placement, output switcher and all lock-screen controls.
+        builder.setColorized(true)
+        return super.addNotificationActions(mediaSession, mediaButtons, builder, actionFactory)
+      }
+    }
 
   fun setSmallIcon(iconResId: Int): EchoNotificationProvider {
     defaultProvider.setSmallIcon(iconResId)

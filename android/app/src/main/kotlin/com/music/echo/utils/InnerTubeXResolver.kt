@@ -240,6 +240,13 @@ object InnerTubeXResolver {
   /** Clients refused a track mid-playback, by videoId, and until when. */
   private val excluded = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
 
+  internal fun audioRung(maxKbps: Int, requireM4a: Boolean): AudioQuality = when {
+    requireM4a -> AudioQuality.MP4
+    maxKbps <= LOW_KBPS -> AudioQuality.LOW
+    maxKbps > 160 -> AudioQuality.HIGH
+    else -> AudioQuality.AUTO
+  }
+
   /**
    * InnerTubeX picks one format per ask and has no bitrate ceiling of its own: [maxKbps] only
    * chooses between its smallest and best rungs, and [requireM4a] asks for its best AAC-in-MP4.
@@ -265,13 +272,7 @@ object InnerTubeXResolver {
           ContentHints()
             .withStreamCapabilities(allowHls = false, allowSabr = false, allowBoundedRange = true),
         excludedClients = excludedFor(videoId) + skipClients,
-        audioQuality =
-          when {
-            requireM4a -> AudioQuality.MP4
-            maxKbps <= LOW_KBPS -> AudioQuality.LOW
-            maxKbps > 160 -> AudioQuality.HIGH
-            else -> AudioQuality.AUTO
-          },
+        audioQuality = audioRung(maxKbps, requireM4a),
         clientPlaybackNonce = generateClientPlaybackNonce(),
       ) ?: return null
     check(stream.sabrBootstrap == null) { "SABR is not supported by this playback engine" }

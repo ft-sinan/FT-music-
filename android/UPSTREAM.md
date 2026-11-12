@@ -1,6 +1,8 @@
 # Android upstream and license
 
-The Android app is a modified fork of [Echo Music](https://github.com/EchoMusicApp/Echo-Music), copyright its authors and contributors. The source snapshot comes from commit `c0de840532aadc36a84475b63291fbc6452a1668` (2026-10-29). Original copyright notices and upstream contributor credits remain in the source and About screen. This fork is not affiliated with or endorsed by Echo Music.
+The Android app is a modified fork of [Echo Music](https://github.com/EchoMusicApp/Echo-Music), copyright its authors and contributors. The source snapshot comes from commit `c0de840532aadc36a84475b63291fbc6452a1668` (2026-10-29). Original copyright notices and upstream contributor credits remain in this source and the distribution notices. The app's About screen links to this source and the GPL. This fork is not affiliated with or endorsed by Echo Music.
+
+The inherited app resources also thanked MO Agamy and named echoDH P ASHOKAN in earlier-project credits. Those inherited attributions are retained here; they are not claims that either person created FT Music.
 
 Echo Music is licensed under the GNU General Public License, version 3. The full license is in [LICENSE](LICENSE). The Android fork and modifications are distributed under that license; anyone distributing an APK must also comply with the GPL's source and notice requirements. Keep the exact corresponding source available for every distributed build.
 

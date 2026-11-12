@@ -160,12 +160,9 @@ fun LocalPlaylistMenu(
         description = { Text(stringResource(R.string.share_playlist_desc)) },
         icon = { Icon(painter = painterResource(R.drawable.share), contentDescription = null) },
         onClick = {
-          val shareText =
-            if (isYouTubePlaylist) {
-              "https://share.echomusic.fun/playlist?list=${playlist.playlist.browseId}"
-            } else {
-              songs.joinToString("\n") { it.song.song.title }
-            }
+          val shareText = playlist.playlist.browseId?.takeIf { it.isNotBlank() }
+            ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+            ?: songs.joinToString("\n") { it.song.song.title }
           val sendIntent: Intent =
             Intent().apply {
               action = Intent.ACTION_SEND

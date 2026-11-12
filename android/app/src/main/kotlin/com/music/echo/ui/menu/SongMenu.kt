@@ -1,6 +1,5 @@
 package echo.music.iad1tya.ui.menu
 
-import android.content.Intent
 import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -43,6 +42,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.generate.trackKeyOf
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -52,7 +52,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -79,13 +78,17 @@ import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.db.entities.SpeedDialItem
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.toMediaMetadata
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.YouTubeQueue
 import echo.music.iad1tya.ui.component.HeartBurstIcon
 import echo.music.iad1tya.ui.component.ListDialog
+import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalAudioDeletion
+import echo.music.iad1tya.ui.component.LocalSongInfo
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
+import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
 import echo.music.iad1tya.ui.component.Material3MenuItemData
 import echo.music.iad1tya.ui.component.NewAction
 import echo.music.iad1tya.ui.component.NewActionGrid
@@ -93,7 +96,6 @@ import echo.music.iad1tya.ui.component.SongListItem
 import echo.music.iad1tya.ui.component.TextFieldDialog
 import echo.music.iad1tya.ui.utils.ShowMediaInfo
 import echo.music.iad1tya.utils.rememberPreference
-import echo.music.iad1tya.utils.shareLocalAudio
 import echo.music.iad1tya.viewmodels.CachePlaylistViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,14 +112,24 @@ fun SongMenu(
   isFromCache: Boolean = false,
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val playerConnection = LocalPlayerConnection.current ?: return
   val songState = database.song(originalSong.id).collectAsState(initial = originalSong)
   val song = songState.value ?: originalSong
+  val loadAnimationItem = rememberLoadAnimationItem(song.toMediaMetadata(), onDismiss)
+  var showShareDialog by rememberSaveable(song.id) { mutableStateOf(false) }
+  if (showShareDialog) {
+    SongShareDialog(mediaId = song.id, mimeHint = song.format?.mimeType, onDismiss = {
+      showShareDialog = false
+      onDismiss()
+    })
+  }
   val download by
     LocalDownloadUtil.current.getDownload(originalSong.id).collectAsState(initial = null)
   val coroutineScope = rememberCoroutineScope()
   val localAudioDeletion = LocalAudioDeletion.current
+  val localSongInfo = LocalSongInfo.current
   val syncUtils = LocalSyncUtils.current
   val listenTogetherManager = LocalListenTogetherManager.current
   val scope = rememberCoroutineScope()
@@ -430,18 +442,7 @@ fun SongMenu(
               },
               text = stringResource(R.string.share),
               onClick = {
-                onDismiss()
-                if (song.song.isLocal) {
-                  shareLocalAudio(context, song.id, song.format?.mimeType)
-                } else {
-                  val intent =
-                    Intent().apply {
-                      action = Intent.ACTION_SEND
-                      type = "text/plain"
-                      putExtra(Intent.EXTRA_TEXT, "https://share.echomusic.fun/watch?v=${song.id}")
-                    }
-                  context.startActivity(Intent.createChooser(intent, null))
-                }
+                showShareDialog = true
               }
             )
           ),
@@ -449,6 +450,10 @@ fun SongMenu(
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp)
       )
     }
+    item {
+      Material3MenuGroup(items = listOf(loadAnimationItem))
+    }
+
     item {
       Material3MenuGroup(
         items =
@@ -480,15 +485,35 @@ fun SongMenu(
               )
             } else null,
             Material3MenuItemData(
-              title = { Text(text = stringResource(R.string.edit)) },
-              description = { Text(text = stringResource(R.string.edit_song)) },
+              // A local song's tags live in its file, so editing means rewriting the file.
+              title = {
+                Text(
+                  text = stringResource(
+                    if (song.song.isLocal) R.string.ft_edit_info_title else R.string.edit
+                  )
+                )
+              },
+              description = {
+                Text(
+                  text = stringResource(
+                    if (song.song.isLocal) R.string.ft_edit_info_desc else R.string.edit_song
+                  )
+                )
+              },
               icon = {
                 Icon(
                   painter = painterResource(R.drawable.edit),
                   contentDescription = null,
                 )
               },
-              onClick = { showEditDialog = true }
+              onClick = {
+                if (song.song.isLocal) {
+                  localSongInfo.request(song)
+                  onDismiss()
+                } else {
+                  showEditDialog = true
+                }
+              }
             ),
             if (song.song.isLocal) {
               Material3MenuItemData(
@@ -805,22 +830,31 @@ fun SongMenu(
                       )
                     },
                     onClick = {
-                      val downloadRequest =
-                        DownloadRequest.Builder(song.id, song.id.toUri())
-                          .setCustomCacheKey(song.id)
-                          .setData(song.song.title.toByteArray())
-                          .build()
-                      DownloadService.sendAddDownload(
-                        context,
-                        ExoDownloadService::class.java,
-                        downloadRequest,
-                        false,
-                      )
+                      downloadChooser.request(DownloadChooserItem(song.id, song.song.title))
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      onDismiss()
                     }
                   )
                 }
               }
             )
+        )
+      }
+    }
+
+    // A failed partial can be retried normally, or explicitly removed when its
+    // old source cannot be safely resumed after an update or format change.
+    if (download?.state == Download.STATE_FAILED) {
+      item { Spacer(modifier = Modifier.height(12.dp)) }
+      item {
+        Material3MenuGroup(
+          items = listOf(
+            Material3MenuItemData(
+              title = { Text(stringResource(R.string.ft_remove_failed_download)) },
+              icon = { Icon(painter = painterResource(R.drawable.delete), contentDescription = null) },
+              onClick = { DownloadService.sendRemoveDownload(context, ExoDownloadService::class.java, song.id, false) }
+            )
+          )
         )
       }
     }

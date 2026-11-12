@@ -214,12 +214,12 @@
     <string name="enable_lrclib">Ota LrcLib-lyriikantarjoaja käyttöön</string>
     <string name="hide_explicit">Piilota sopimaton sisältö</string>
     <string name="dismiss">Hylkää</string>
-    <string name="discord_information">echomusic käyttää KizzyRPC-kirjastoa asettaaksesi Discord-tilisi tilan. Tämä edellyttää Discord Gateway-yhteyttä, jota voidaan katsoa Discordin käyttöehtojen rikkomuksena. Ei kuitenkaan ole tiedossa tapauksia, joissa käyttäjätilit olisi jäädytetty tästä syystä. Käytä omalla vastuullasi. \n \nechomusic poimii ainoastaan tunnuksesi, ja kaikki muu säilytetään paikallisesti.</string>
+    <string name="discord_information">FT Music käyttää KizzyRPC-kirjastoa asettaaksesi Discord-tilisi tilan. Tämä edellyttää Discord Gateway-yhteyttä, jota voidaan katsoa Discordin käyttöehtojen rikkomuksena. Ei kuitenkaan ole tiedossa tapauksia, joissa käyttäjätilit olisi jäädytetty tästä syystä. Käytä omalla vastuullasi. \n \nFT Music poimii ainoastaan tunnuksesi, ja kaikki muu säilytetään paikallisesti.</string>
     <string name="options">Asetukset</string>
     <string name="preview">Esikatselu</string>
     <string name="login_failed">Kirjautuminen epäonnistui</string>
     <string name="action_logout">Kirjaudu ulos</string>
-    <string name="enable_discord_rpc">Tämä on Discord-integraatio-ominaisuus, se tarkoittaa echomusic-toiminnan näyttämistä Discord-tililläsi</string>
+    <string name="enable_discord_rpc">Tämä on Discord-integraatio-ominaisuus, se tarkoittaa FT Music-toiminnan näyttämistä Discord-tililläsi</string>
     <string name="forgotten_favorites">Unohtuneet suosikit</string>
     <string name="sample_rate">Näytteenottonopeus</string>
     <string name="queue_searched_songs">Haetut laulut</string>
@@ -432,9 +432,9 @@
     <string name="listenbrainz_scrobbling">ListenBrainz-skrobblaus</string>
     <string name="listenbrainz_scrobbling_description">Lähetä kuuntelemasi kappaleet automaattisesti ListenBrainziin</string>
     <string name="set_listenbrainz_token">Aseta ListenBrainz-tunniste</string>
-    <string name="youtube_decryption_settings">Echo Extractor</string>
+    <string name="youtube_decryption_settings">YouTube Extractor</string>
     <string name="youtube_decryption_desc">Määritä poimijan asetukset</string>
-    <string name="youtube_decryption_support">Echo Extractor</string>
+    <string name="youtube_decryption_support">YouTube Extractor</string>
     <string name="youtube_decryption_support_desc">Poimii YouTuben toistomääritykset automaattisesti. Lukittu aktiiviseksi.</string>
     <string name="force_update_cipher">Pakota määritysten päivitys</string>
     <string name="force_update_cipher_desc">Lataa uusimmat poimijan ohitusmääritykset. Enintään 3 päivitystä päivässä.</string>

@@ -369,7 +369,7 @@
     <string name="backup_create_failed">ব্যাকআপ তৈরি করা যায়নি</string>
     <string name="restore_failed">ব্যাকআপ পুনরুদ্ধার করা যায়নি</string>
     <string name="discord_integration">Discord ইন্টিগ্রেশন</string>
-    <string name="discord_information">echomusic আপনার Discord অ্যাকাউন্টের স্ট্যাটাস সেট করতে KizzyRPC লাইব্রেরি ব্যবহার করে। এতে Discord Gateway সংযোগ ব্যবহৃত হয়, যা Discord-এর পরিষেবার শর্তাবলীর লঙ্ঘন হিসেবে বিবেচিত হতে পারে। তবে এ কারণে কোনো ব্যবহারকারীর অ্যাকাউন্ট স্থগিত হওয়ার ঘটনা জানা যায়নি। নিজ দায়িত্বে ব্যবহার করুন।\nchomusic শুধু আপনার টোকেন সংগ্রহ করবে এবং অন্য সবকিছু স্থানীয়ভাবে সংরক্ষিত থাকবে।</string>
+    <string name="discord_information">FT Music আপনার Discord অ্যাকাউন্টের স্ট্যাটাস সেট করতে KizzyRPC লাইব্রেরি ব্যবহার করে। এতে Discord Gateway সংযোগ ব্যবহৃত হয়, যা Discord-এর পরিষেবার শর্তাবলীর লঙ্ঘন হিসেবে বিবেচিত হতে পারে। তবে এ কারণে কোনো ব্যবহারকারীর অ্যাকাউন্ট স্থগিত হওয়ার ঘটনা জানা যায়নি। নিজ দায়িত্বে ব্যবহার করুন।\nchomusic শুধু আপনার টোকেন সংগ্রহ করবে এবং অন্য সবকিছু স্থানীয়ভাবে সংরক্ষিত থাকবে।</string>
     <string name="dismiss">বন্ধ করুন</string>
     <string name="options">বিকল্প</string>
     <string name="preview">প্রিভিউ</string>
@@ -445,9 +445,9 @@
     <string name="listenbrainz_scrobbling_description">আপনার শোনা ট্র্যাকগুলো স্বয়ংক্রিয়ভাবে ListenBrainz-এ জমা দিন</string>
     <string name="export_directory_unavailable">এই ডিভাইসে কোনো এক্সপোর্ট ডিরেক্টরি অ্যাক্সেস করা যাচ্ছে না। অনুগ্রহ করে ম্যানুয়ালি একটি নির্ধারণ করুন।</string>
     <string name="set_listenbrainz_token">ListenBrainz টোকেন সেট করুন</string>
-    <string name="youtube_decryption_settings">Echo Extractor</string>
+    <string name="youtube_decryption_settings">YouTube Extractor</string>
     <string name="youtube_decryption_desc">এক্সট্র্যাক্টরের সেটিংস কনফিগার করুন</string>
-    <string name="youtube_decryption_support">Echo Extractor</string>
+    <string name="youtube_decryption_support">YouTube Extractor</string>
     <string name="youtube_decryption_support_desc">YouTube প্লেব্যাকের কনফিগারেশন স্বয়ংক্রিয়ভাবে বের করে। সক্রিয় অবস্থায় লক করা।</string>
     <string name="force_update_cipher">কনফিগারেশন জোরপূর্বক আপডেট করুন</string>
     <string name="force_update_cipher_desc">এক্সট্র্যাক্টরের সর্বশেষ ওভাররাইড ম্যাপিং ডাউনলোড করুন। প্রতিদিন সর্বোচ্চ ৩টি আপডেট করা যাবে।</string>
@@ -771,7 +771,7 @@
     <string name="scrobble_delay_minutes_desc">স্ক্রবল বিলম্ব মিনিট সংক্রান্ত সেটিংস পরিচালনা করুন</string>
     <string name="ai_recommendations_refresh_desc">রেকমেন্ডেশন রিফ্রেশ করার জন্য AI সেটিংস কনফিগার করুন</string>
     <string name="last_updated_desc">সর্বশেষ আপডেট সংক্রান্ত সেটিংস পরিচালনা করুন</string>
-    <string name="youtube_decryption_settings_desc">Echo Extractor সংক্রান্ত সেটিংস পরিচালনা করুন</string>
+    <string name="youtube_decryption_settings_desc">YouTube Extractor সংক্রান্ত সেটিংস পরিচালনা করুন</string>
     <string name="refresh_desc">রিফ্রেশ সংক্রান্ত সেটিংস পরিচালনা করুন</string>
     <string name="activity_status_desc">অ্যাক্টিভিটি স্ট্যাটাস সংক্রান্ত সেটিংস পরিচালনা করুন</string>
     <string name="platform_status_desc">প্ল্যাটফর্ম স্ট্যাটাস সংক্রান্ত সেটিংস পরিচালনা করুন</string>

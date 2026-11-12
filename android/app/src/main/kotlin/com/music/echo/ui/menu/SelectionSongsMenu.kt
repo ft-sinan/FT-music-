@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.offline.Download
@@ -40,6 +39,7 @@ import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import com.music.innertube.YouTube
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.LocalSyncUtils
@@ -50,6 +50,7 @@ import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.models.toSongEntity
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.ui.component.DefaultDialog
@@ -72,6 +73,7 @@ fun SelectionSongMenu(
   songPosition: List<PlaylistSongMap>? = emptyList(),
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val downloadUtil = LocalDownloadUtil.current
   val coroutineScope = rememberCoroutineScope()
@@ -405,19 +407,9 @@ fun SelectionSongMenu(
                       )
                     },
                     onClick = {
-                      songSelection.forEach { song ->
-                        val downloadRequest =
-                          DownloadRequest.Builder(song.id, song.id.toUri())
-                            .setCustomCacheKey(song.id)
-                            .setData(song.song.title.toByteArray())
-                            .build()
-                        DownloadService.sendAddDownload(
-                          context,
-                          ExoDownloadService::class.java,
-                          downloadRequest,
-                          false,
-                        )
-                      }
+                      downloadChooser.request(songSelection.map { DownloadChooserItem(it.id, it.song.title) })
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      onDismiss()
                     }
                   )
                 }
@@ -494,6 +486,7 @@ fun SelectionMediaMetadataMenu(
   clearAction: () -> Unit,
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val downloadUtil = LocalDownloadUtil.current
   val coroutineScope = rememberCoroutineScope()
@@ -788,19 +781,9 @@ fun SelectionMediaMetadataMenu(
                       )
                     },
                     onClick = {
-                      songSelection.forEach { song ->
-                        val downloadRequest =
-                          DownloadRequest.Builder(song.id, song.id.toUri())
-                            .setCustomCacheKey(song.id)
-                            .setData(song.title.toByteArray())
-                            .build()
-                        DownloadService.sendAddDownload(
-                          context,
-                          ExoDownloadService::class.java,
-                          downloadRequest,
-                          false,
-                        )
-                      }
+                      downloadChooser.request(songSelection.map { DownloadChooserItem(it.id, it.title) })
+                      // Close the sheet so the chooser is the only dialog on screen.
+                      onDismiss()
                     }
                   )
                 }

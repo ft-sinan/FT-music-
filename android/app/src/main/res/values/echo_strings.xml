@@ -396,7 +396,7 @@
     <string name="enable_scrobbling">Enable scrobbling</string>
     <string name="lastfm_now_playing">Send Now Playing</string>
     <string name="last_fm_send_likes">Send Likes/Unlikes</string>
-    <string name="last_fm_send_likes_description">Love/Unlove songs in Last.fm when they are Liked/Unliked in echomusic</string>
+    <string name="last_fm_send_likes_description">Love/Unlove songs in Last.fm when they are Liked/Unliked in FT Music</string>
     <string name="logging_in">Logging in…</string>
 
     <string name="scrobbling_configuration">Scrobbling Configuration</string>
@@ -484,19 +484,19 @@
     <string name="wrapped_total_artists_subtitle">unique artists</string>
     <string name="wrapped_total_songs_title">You listened to</string>
     <string name="wrapped_total_songs_subtitle">unique songs</string>
-    <string name="wrapped_intro_title">echomusic</string>
+    <string name="wrapped_intro_title">FT Music</string>
     <string name="wrapped_intro_subtitle">it\'s time to see what you\'ve been listening to</string>
     <string name="wrapped_intro_button">let\'s go!</string>
-    <string name="wrapped_end_thanks">Thanks for listening with echomusic!</string>
+    <string name="wrapped_end_thanks">Thanks for listening with FT Music!</string>
     <string name="wrapped_end_create_playlist">Create Your Wrapped Playlist</string>
     <string name="wrapped_end_creating_playlist">Creating...</string>
     <string name="wrapped_end_playlist_saved">Playlist Saved</string>
-    <string name="wrapped_logo_content_description">echomusic Logo</string>
+    <string name="wrapped_logo_content_description">FT Music Logo</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">YOUR WRAPPED IS READY!</string>
     <string name="wrapped_ready_subtitle">Time to see what you loved this year.</string>
     <string name="wrapped_thank_you">Thank you for listening</string>
-    <string name="wrapped_special_thanks">Special thanks to echodh for creating echomusic</string>
+    <string name="wrapped_special_thanks">Thanks for being part of FT Music.</string>
     <string name="wrapped_close">Close wrapped</string>
     <string name="wrapped_playlist_title">Your %s Wrapped</string>
     <string name="wrapped_create_playlist">Create playlist</string>
@@ -572,9 +572,9 @@
     <string name="plays">plays</string>
     <string name="casting_to">Casting to %s</string>
     <string name="progress_percent">Progress %s%%</string>
-    <string name="listening_to_echomusic">Listening to echomusic</string>
+    <string name="listening_to_echomusic">Listening to FT Music</string>
     <string name="listen_on_youtube_music">Listen on YouTube Music</string>
-    <string name="visit_echomusic">Visit echomusic</string>
+    <string name="visit_echomusic">Visit FT Music</string>
     <string name="open">Open</string>
     <string name="failed_to_create_image">Failed to create image: %s</string>
     <string name="copied_title">Copied Title</string>
@@ -591,13 +591,13 @@
     <!-- Widget strings -->
     <string name="album_art">Album art</string>
     <string name="no_song_playing">No song playing</string>
-    <string name="tap_to_open">Tap to open echomusic</string>
+    <string name="tap_to_open">Tap to open FT Music</string>
     <string name="previous">Previous</string>
     <string name="play_pause">Play/Pause</string>
     <string name="next">Next</string>
     <string name="like">Like</string>
     <string name="not_playing">No song playing</string>
-    <string name="tap_to_play">Tap to open echomusic</string>
+    <string name="tap_to_play">Tap to open FT Music</string>
     <string name="widget_description">Music player widget with playback controls</string>
     <string name="queue_widget_description">Music player with queue preview</string>
     <string name="turntable_widget_description">Circular music widget with play and like controls</string>
@@ -809,7 +809,7 @@
     <string name="crash_share_logs">Share Logs</string>
     <string name="copy_logs">Copy Logs</string>
     <string name="crash_share_title">Share crash report</string>
-    <string name="crash_report_subject">echomusic Crash Report</string>
+    <string name="crash_report_subject">FT Music Crash Report</string>
     <string name="crash_close">Close</string>
     <string name="crash_no_log">No crash log available</string>
 
@@ -900,9 +900,9 @@
     <string name="discord_rpc_preview">Rich Presence Preview</string>
     <string name="discord_presence">Presence</string>
     <string name="discord_connect_description">Sign in with Discord to share what you\'re listening to</string>
-    <string name="discord_playing_echomusic">Playing echomusic</string>
-    <string name="discord_watching_echomusic">Watching echomusic</string>
-    <string name="discord_competing_echomusic">Competing in echomusic</string>
+    <string name="discord_playing_echomusic">Playing FT Music</string>
+    <string name="discord_watching_echomusic">Watching FT Music</string>
+    <string name="discord_competing_echomusic">Competing in FT Music</string>
     <string name="discord_activity_name">Activity name</string>
     <string name="discord_activity_name_description">Custom name for the activity (leave empty for default)</string>
     <string name="discord_advanced_mode">Advanced mode</string>
@@ -962,7 +962,7 @@
 
     <string name="perm_required">Required</string>
     <string name="perm_permissions">Permissions</string>
-    <string name="perm_intro_text">These permissions are required for echomusic to function correctly. Please grant them to proceed.</string>
+    <string name="perm_intro_text">These permissions are required for FT Music to function correctly. Please grant them to proceed.</string>
 
     <string name="perm_notif_title">Notifications</string>
     <string name="perm_notif_desc">Know immediately when your music is playing and control it from the notification bar.</string>
@@ -972,7 +972,7 @@
 
     <string name="feat_discover">Discover</string>
     <string name="feat_features">Features</string>
-    <string name="feat_intro">Explore everything echomusic has to offer for your music journey.</string>
+    <string name="feat_intro">Explore everything FT Music has to offer for your music journey.</string>
 
     <string name="feat_lyrics_title">Smart Lyrics</string>
     <string name="feat_lyrics_desc">Enjoy synchronized, word-by-word lyrics for millions of songs.</string>
@@ -996,7 +996,7 @@
     <string name="welcome_update_status">Updated</string>
     <string name="welcome_update_intro">Ensuring you have the latest features and security improvements.</string>
     <string name="welcome_checking_updates">Checking for updates…</string>
-    <string name="welcome_up_to_date">echomusic is up to date!</string>
+    <string name="welcome_up_to_date">FT Music is up to date!</string>
     <string name="welcome_update_available">New version is available: %s</string>
     <string name="welcome_everything_ready">Everything is now up to date</string>
     <string name="commits_title">Commits</string>
@@ -1087,4 +1087,66 @@
     <string name="legacy_icon">Legacy Icon</string>
     <string name="legacy_icon_desc">Revert the app icon back to the original legacy design</string>
     <string name="clear_queue_confirm">Are you sure you want to clear upcoming songs from the queue?</string>
+    <string name="widget_lyrics_name">FT Lyrics Player</string>
+    <string name="widget_lyrics_description">A glass-style player with current lyrics and playback controls</string>
+    <string name="widget_ft_compact_name">FT Compact Player</string>
+    <string name="widget_ft_compact_description">A compact player with artwork and playback controls</string>
+    <string name="widget_open_ft_music">Open FT Music</string>
+    <string name="widget_lyrics_label">LYRICS</string>
+    <string name="widget_lyrics_synced">SYNCED LYRICS</string>
+    <string name="widget_lyrics_unsynced">Synced lyrics unavailable</string>
+    <string name="widget_lyrics_unavailable">Synced lyrics unavailable</string>
+    <string name="widget_lyrics_loading">Finding lyrics…</string>
+    <string name="widget_lyrics_begin_soon">Lyrics begin soon</string>
+    <string name="widget_lyrics_instrumental">♪</string>
+    <string name="share_song_title">Share song</string>
+    <string name="share_file">Share file</string>
+    <string name="share_link">Share YouTube Music link</string>
+    <string name="share_open_link">Open link with…</string>
+    <string name="share_file_checking">Checking for an accessible audio file…</string>
+    <string name="share_file_available">An accessible audio file was found.</string>
+    <string name="share_file_not_available">No accessible audio file was found. Partial caches cannot be shared.</string>
+    <string name="share_no_youtube_link">This song has no YouTube Music link.</string>
+    <string name="share_unavailable">No compatible app is available.</string>
+    <string name="animation_load">Load animation</string>
+    <string name="animation_load_desc">Find matching animated artwork without changing the audio file.</string>
+    <string name="animation_searching">Finding animation…</string>
+    <string name="animation_data_saver">Turn off Data Saver to search for animated artwork.</string>
+    <string name="animation_not_found">No matching animation was found, or the sources could not be reached. The still cover is unchanged.</string>
+    <string name="animation_found">Animation found. It will appear when this song plays.</string>
+    <string name="animation_found_session">Animation found for this session, but the selection could not be saved.</string>
+    <string name="animation_playback_failed">The animation could not play. Showing the still cover instead.</string>
+    <string name="song_cache_expiry_note">Cached songs are removed one hour after they are cached. Downloaded songs are kept.</string>
+    <string name="ft_edit_info_title">Edit info</string>
+    <string name="ft_edit_info_desc">Change the title, artists, album, year and cover stored in this file.</string>
+    <string name="ft_edit_info_audio_note">The audio itself is copied, never re-encoded, so quality does not change.</string>
+    <string name="ft_edit_info_title_field">Title</string>
+    <string name="ft_edit_info_artists">Artists</string>
+    <string name="ft_edit_info_album">Album</string>
+    <string name="ft_edit_info_year">Year</string>
+    <string name="ft_edit_info_cover">Cover</string>
+    <string name="ft_edit_info_cover_none">No cover is set for this edit.</string>
+    <string name="ft_edit_info_cover_set">A cover is ready to be written into the file.</string>
+    <string name="ft_edit_info_cover_choose">Choose image</string>
+    <string name="ft_edit_info_cover_remove">Remove</string>
+    <string name="ft_edit_info_cover_unsupported">This file format cannot store a cover, so it will be left out.</string>
+    <string name="ft_edit_info_cover_failed">The cover could not be downloaded. The text details still apply.</string>
+    <string name="ft_edit_info_cover_unreadable">That image could not be read.</string>
+    <string name="ft_edit_info_search">Search</string>
+    <string name="ft_edit_info_search_hint">Search YouTube Music</string>
+    <string name="ft_edit_info_searching">Searching YouTube Music…</string>
+    <string name="ft_edit_info_no_results">No matching songs were found.</string>
+    <string name="ft_edit_info_lookup_failed">YouTube Music could not be reached. Check the connection and try again.</string>
+    <string name="ft_edit_info_results">%1$d results. Tap Use to fill in the details, then correct anything.</string>
+    <string name="ft_edit_info_use">Use</string>
+    <string name="ft_edit_info_hide_results">Hide results</string>
+    <string name="ft_edit_info_apply">Apply</string>
+    <string name="ft_edit_info_saving">Writing tags…</string>
+    <string name="ft_edit_info_saved">Info saved in the audio file.</string>
+    <string name="ft_edit_info_saved_without_cover">Info saved in the audio file. No cover was written.</string>
+    <string name="ft_edit_info_failed_format">FT Music cannot edit tags in this file format. The file is unchanged.</string>
+    <string name="ft_edit_info_failed_permission">Android did not allow writing this file. Nothing was changed.</string>
+    <string name="ft_edit_info_failed_nofile">The audio file could not be found or read.</string>
+    <string name="ft_edit_info_failed_write">The tags could not be written. The original file is unchanged.</string>
+    <string name="ft_edit_info_failed_verify">The rewritten file did not check out, so it was discarded. Your file is unchanged.</string>
 </resources>

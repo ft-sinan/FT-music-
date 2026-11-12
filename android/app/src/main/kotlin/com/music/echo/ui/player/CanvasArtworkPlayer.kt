@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,14 +40,18 @@ fun CanvasArtworkPlayer(
   fallbackUrl: String?,
   isPlaying: Boolean,
   modifier: Modifier = Modifier,
+  fitWideArtwork: Boolean = false,
+  retryGeneration: Long = 0L,
+  onPlaybackFailure: (() -> Unit)? = null,
 ) {
   val context = LocalContext.current
   val primary = primaryUrl?.takeIf { it.isNotBlank() }
   val fallback = fallbackUrl?.takeIf { it.isNotBlank() }
   val initial = primary ?: fallback ?: return
-  var currentUrl by remember(initial) { mutableStateOf(initial) }
-  var isVideoReady by remember(initial) { mutableStateOf(false) }
-  var videoAspectRatio by remember(initial) { mutableStateOf(1f) }
+  var currentUrl by remember(initial, retryGeneration) { mutableStateOf(initial) }
+  var isVideoReady by remember(initial, retryGeneration) { mutableStateOf(false) }
+  var videoAspectRatio by remember(initial, retryGeneration) { mutableStateOf(1f) }
+  val failureCallback by rememberUpdatedState(onPlaybackFailure)
 
   val okHttpClient = remember {
     OkHttpClient.Builder()
@@ -133,7 +138,7 @@ fun CanvasArtworkPlayer(
     }
   }
 
-  DisposableEffect(exoPlayer, primary, fallback) {
+  DisposableEffect(exoPlayer, primary, fallback, retryGeneration) {
     val listener =
       object : Player.Listener {
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -142,9 +147,12 @@ fun CanvasArtworkPlayer(
               primary -> fallback
               else -> null
             }
-          if (!next.isNullOrBlank()) {
+          // Reveal the still image on every failure, including the final fallback.
+          isVideoReady = false
+          if (!next.isNullOrBlank() && next != currentUrl) {
             currentUrl = next
-            isVideoReady = false
+          } else {
+            failureCallback?.invoke()
           }
         }
 
@@ -162,7 +170,7 @@ fun CanvasArtworkPlayer(
     onDispose { exoPlayer.removeListener(listener) }
   }
 
-  LaunchedEffect(currentUrl, exoPlayer) {
+  LaunchedEffect(currentUrl, exoPlayer, retryGeneration) {
     val normalized = currentUrl.trim()
     val mimeType =
       when {
@@ -219,7 +227,12 @@ fun CanvasArtworkPlayer(
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
       }
     },
-    update = { view -> view.setAspectRatio(videoAspectRatio) },
+    update = { view ->
+      val fit = fitWideArtwork && videoAspectRatio in 1.72f..1.84f
+      view.resizeMode = if (fit) AspectRatioFrameLayout.RESIZE_MODE_FIT else AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+      exoPlayer.videoScalingMode = if (fit) C.VIDEO_SCALING_MODE_SCALE_TO_FIT else C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+      view.setAspectRatio(videoAspectRatio)
+    },
     modifier = modifier.alpha(alpha),
   )
 }

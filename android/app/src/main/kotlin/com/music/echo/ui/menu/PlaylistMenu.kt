@@ -40,13 +40,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import com.music.innertube.YouTube
 import com.music.innertube.utils.parseCookieString
 import echo.music.iad1tya.LocalDatabase
+import echo.music.iad1tya.LocalDownloadChooser
 import echo.music.iad1tya.LocalDownloadUtil
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
@@ -62,6 +62,7 @@ import echo.music.iad1tya.db.entities.Song
 import echo.music.iad1tya.db.entities.SpeedDialItem
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.playback.AudioExportService
+import echo.music.iad1tya.playback.DownloadChooserItem
 import echo.music.iad1tya.playback.ExoDownloadService
 import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.playback.queues.YouTubeQueue
@@ -89,6 +90,7 @@ fun PlaylistMenu(
   songList: List<Song>? = emptyList(),
 ) {
   val context = LocalContext.current
+  val downloadChooser = LocalDownloadChooser.current
   val database = LocalDatabase.current
   val downloadUtil = LocalDownloadUtil.current
   val playerConnection = LocalPlayerConnection.current ?: return
@@ -407,7 +409,9 @@ fun PlaylistMenu(
                     type = "text/plain"
                     putExtra(
                       Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/playlist?list=${dbPlaylist?.playlist?.browseId}"
+                      dbPlaylist?.playlist?.browseId?.takeIf { it.isNotBlank() }
+                        ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+                        ?: songs.joinToString("\n") { it.song.title }
                     )
                   }
                 context.startActivity(Intent.createChooser(intent, null))
@@ -611,19 +615,9 @@ fun PlaylistMenu(
                         )
                       },
                       onClick = {
-                        songs.forEach { song ->
-                          val downloadRequest =
-                            DownloadRequest.Builder(song.id, song.id.toUri())
-                              .setCustomCacheKey(song.id)
-                              .setData(song.song.title.toByteArray())
-                              .build()
-                          DownloadService.sendAddDownload(
-                            context,
-                            ExoDownloadService::class.java,
-                            downloadRequest,
-                            false,
-                          )
-                        }
+                        downloadChooser.request(songs.map { DownloadChooserItem(it.id, it.song.title) })
+                        // Close the sheet so the chooser is the only dialog on screen.
+                        onDismiss()
                       }
                     )
                   }

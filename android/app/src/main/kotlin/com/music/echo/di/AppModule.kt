@@ -24,6 +24,8 @@ import echo.music.iad1tya.generate.RealGenerationStatus
 import echo.music.iad1tya.generate.RecommendationEngine
 import echo.music.iad1tya.listentogether.ListenTogetherClient
 import echo.music.iad1tya.listentogether.ListenTogetherManager
+import echo.music.iad1tya.playback.StreamingCacheAges
+import echo.music.iad1tya.playback.StreamingCacheEvictor
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.get
 import echo.music.iad1tya.utils.lastfm.LastFmTasteApi
@@ -157,14 +159,16 @@ object AppModule {
   fun providePlayerCache(
     @ApplicationContext context: Context,
     databaseProvider: DatabaseProvider,
+    ages: StreamingCacheAges,
   ): SimpleCache {
     val cacheSize = context.dataStore[MaxSongCacheSizeKey] ?: 1024
+    val sizeEvictor = when (cacheSize) {
+      -1 -> NoOpCacheEvictor()
+      else -> com.music.echo.playback.DynamicLruCacheEvictor(cacheSize * 1024 * 1024L)
+    }
     return SimpleCache(
       context.filesDir.resolve("exoplayer"),
-      when (cacheSize) {
-        -1 -> NoOpCacheEvictor()
-        else -> com.music.echo.playback.DynamicLruCacheEvictor(cacheSize * 1024 * 1024L)
-      },
+      StreamingCacheEvictor(sizeEvictor, ages),
       databaseProvider,
     )
   }

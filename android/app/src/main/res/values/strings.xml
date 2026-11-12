@@ -436,7 +436,7 @@
     <string name="restore_failed">Failed to restore backup</string>
 
     <string name="discord_integration">Discord Integration</string>
-    <string name="discord_information">echomusic uses the KizzyRPC library to set your Discord account\'s status. This involves using the Discord Gateway connection, which may be considered a violation of Discord\'s TOS. However, there are no known cases of user accounts being suspended for this reason. Use at your own risk.\n\echomusic will only extract your token, and everything else is stored locally.</string>
+    <string name="discord_information">FT Music uses the KizzyRPC library to set your Discord account\'s status. This involves using the Discord Gateway connection, which may be considered a violation of Discord\'s TOS. However, there are no known cases of user accounts being suspended for this reason. Use at your own risk.\nFT Music will only extract your token, and everything else is stored locally.</string>
     <string name="dismiss">Dismiss</string>
     <string name="options">Options</string>
     <string name="preview">Preview</string>
@@ -525,9 +525,9 @@
     <string name="set_listenbrainz_token">Set ListenBrainz Token</string>
 
     <!-- Echo Extractor Settings -->
-    <string name="youtube_decryption_settings">Echo Extractor</string>
+    <string name="youtube_decryption_settings">YouTube Extractor</string>
     <string name="youtube_decryption_desc">Configure extractor settings</string>
-    <string name="youtube_decryption_support">Echo Extractor</string>
+    <string name="youtube_decryption_support">YouTube Extractor</string>
     <string name="youtube_decryption_support_desc">Automatically extracts YouTube playback configurations. Locked to Active.</string>
     <string name="force_update_cipher">Force Update Configurations</string>
     <string name="force_update_cipher_desc">Download the latest extractor override mappings. Limited to 3 updates per day.</string>
@@ -854,7 +854,7 @@
     <string name="scrobble_delay_minutes_desc">Manage Scrobble delay minutes settings</string>
     <string name="ai_recommendations_refresh_desc">Configure AI settings for Refresh Recommendations</string>
     <string name="last_updated_desc">Manage Last updated settings</string>
-    <string name="youtube_decryption_settings_desc">Manage Echo Extractor settings</string>
+    <string name="youtube_decryption_settings_desc">Manage YouTube Extractor settings</string>
     <string name="refresh_desc">Manage refresh settings</string>
     <string name="activity_status_desc">Manage activity_status settings</string>
     <string name="platform_status_desc">Manage platform_status settings</string>
@@ -990,4 +990,22 @@
     <!-- Theme & UI -->
     <string name="theme_mode_monochrome">Monochrome</string>
     <string name="theme_mode_monochrome_desc">Pure neutral grayscale with high contrast</string>
+    <string name="ft_download_quality_high">High</string>
+    <string name="ft_download_quality_high_desc">Prefers the best available source audio. The actual bitrate and codec depend on the source.</string>
+    <string name="ft_download_quality_saver">Data saver</string>
+    <string name="ft_download_quality_saver_desc">Prefers a smaller source stream when available.</string>
+    <string name="ft_download_quality_applies">Used for downloads that start automatically, such as Auto-download on like. Tapping Download offers the available formats each time. Existing downloads stay as they are.</string>
+    <string name="ft_download_restart_needed">This unfinished download cannot safely resume. In the song menu, remove the failed download, then download it again.</string>
+    <string name="ft_remove_failed_download">Remove failed download</string>
+    <string name="ft_download_chooser_title">Choose a download format</string>
+    <string name="ft_download_chooser_title_multiple">Choose a format for %1$d songs</string>
+    <string name="ft_download_chooser_loading">Finding available formats…</string>
+    <string name="ft_download_chooser_suggested">Suggested</string>
+    <string name="ft_download_chooser_size_unknown">Size unknown</string>
+    <string name="ft_download_chooser_multiple_note">Sizes are from %1$s. The same choice applies to all %2$d songs.</string>
+    <string name="ft_download_chooser_unavailable">%1$s is not available for this song.</string>
+    <string name="ft_download_chooser_locked_note">An unfinished download keeps the format it was started with.</string>
+    <string name="ft_download_chooser_no_options">No downloadable audio format was found for this song. Nothing was queued.</string>
+    <string name="ft_download_chooser_lookup_failed">Available formats could not be loaded. Check your connection and try again. Nothing was queued.</string>
+    <string name="ft_download_queue_failed">The download could not be queued. Try again.</string>
 </resources>

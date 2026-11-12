@@ -533,6 +533,26 @@
                 android:resource="@xml/playlist_widget_info" />
         </receiver>
 
+        <!-- New FT player widgets; the existing widget providers remain unchanged. -->
+        <receiver
+            android:name=".widget.FTLyricsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_lyrics_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ft_lyrics_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.FTCompactWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_ft_compact_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ft_compact_widget_info" />
+        </receiver>
+
         <!-- Echo Modern Widget (4x2) -->
         <receiver
             android:name=".widget.EchoModernWidgetReceiver"

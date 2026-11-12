@@ -24,12 +24,31 @@ def adb(*args, check=True):
 
 
 def dump():
-    adb("shell", "rm", "-f", "/sdcard/ft-window.xml", check=False)
-    result = adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml", check=False)
-    if result.returncode or b"ERROR" in result.stdout:
-        raise RuntimeError(result.stdout.decode("utf-8", "replace"))
-    text = adb("shell", "cat", "/sdcard/ft-window.xml").stdout.decode("utf-8", "replace")
-    return ET.fromstring(text[text.find("<?xml"):])
+    # uiautomator can report success even though its temporary XML isn't readable
+    # yet. Retry the capture itself, but never turn a persistent failure into a pass.
+    last_error = "no UI hierarchy returned"
+    for attempt in range(3):
+        adb("shell", "rm", "-f", "/sdcard/ft-window.xml", check=False)
+        result = adb("shell", "uiautomator", "dump", "/sdcard/ft-window.xml", check=False)
+        if result.returncode or b"ERROR" in result.stdout or b"ERROR" in result.stderr:
+            last_error = (result.stdout + result.stderr).decode("utf-8", "replace").strip()
+        else:
+            captured = adb("shell", "cat", "/sdcard/ft-window.xml", check=False)
+            if captured.returncode:
+                last_error = captured.stderr.decode("utf-8", "replace").strip() or "UI hierarchy file not readable"
+            else:
+                text = captured.stdout.decode("utf-8", "replace")
+                start = text.find("<?xml")
+                if start < 0:
+                    last_error = "UI hierarchy did not contain XML"
+                else:
+                    try:
+                        return ET.fromstring(text[start:])
+                    except ET.ParseError as error:
+                        last_error = f"UI hierarchy XML was invalid: {error}"
+        if attempt < 2:
+            time.sleep(0.5)
+    raise RuntimeError(f"Unable to capture UI hierarchy after 3 attempts: {last_error}")
 
 
 def labels(tree):
@@ -39,12 +58,24 @@ def labels(tree):
 def wait_for(label, timeout=120):
     end = time.monotonic() + timeout
     last = []
+    launcher_recoveries = 0
     while time.monotonic() < end:
         try:
             tree = dump()
             last = labels(tree)
             if label in last:
                 return tree
+            # The emulator's launcher can ANR after instrumentation. Dismiss only its
+            # own dialog and reopen FT; never dismiss an FT Music crash/ANR dialog.
+            if "Pixel Launcher isn't responding" in last and launcher_recoveries < 2:
+                close = next((node for node in tree.iter("node")
+                              if "Close app" in (node.get("text", ""), node.get("content-desc", ""))), None)
+                bounds = [int(n) for n in re.findall(r"\d+", close.get("bounds", ""))] if close is not None else []
+                if len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+                    print("Recovering from emulator Pixel Launcher ANR", flush=True)
+                    adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+                    adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity", check=False)
+                    launcher_recoveries += 1
         except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
             pass
         time.sleep(1)

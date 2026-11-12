@@ -109,6 +109,8 @@ import androidx.core.content.ContextCompat
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.AudioQuality
+import echo.music.iad1tya.constants.DownloadQuality
+import echo.music.iad1tya.constants.DownloadQualityKey
 import echo.music.iad1tya.constants.AudioQualityKey
 import echo.music.iad1tya.echomusic.shapes.RoundedStarShape
 import echo.music.iad1tya.utils.rememberEnumPreference
@@ -907,11 +909,10 @@ fun AudioQualitySelector(context: Context) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DownloadQualitySelector() {
-  val context = LocalContext.current
   val (downloadQuality, onDownloadQualityChange) =
     rememberEnumPreference(
-      key = echo.music.iad1tya.constants.DownloadQualityKey,
-      defaultValue = echo.music.iad1tya.constants.DownloadQuality.YOUTUBE
+      key = DownloadQualityKey,
+      defaultValue = DownloadQuality.HIGH
     )
 
   Column(modifier = Modifier.fillMaxWidth()) {
@@ -922,35 +923,29 @@ fun DownloadQualitySelector() {
       modifier = Modifier.padding(bottom = 12.dp).fillMaxWidth()
     )
 
-    val options = listOf("Opus")
-    val selectedIndex =
-      when (downloadQuality) {
-        echo.music.iad1tya.constants.DownloadQuality.YOUTUBE -> 0
-        else -> 0
-      }
-
+    val options = listOf(DownloadQuality.HIGH, DownloadQuality.DATA_SAVER)
     androidx.compose.foundation.layout.FlowRow(
       modifier = Modifier.padding(horizontal = 16.dp).padding(vertical = 8.dp).fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-      options.forEachIndexed { index, label ->
+      options.forEach { quality ->
         ToggleButton(
-          checked = selectedIndex == index,
-          onCheckedChange = {
-            val newQuality =
-              when (index) {
-                0 -> echo.music.iad1tya.constants.DownloadQuality.YOUTUBE
-                else -> echo.music.iad1tya.constants.DownloadQuality.YOUTUBE
-              }
-            onDownloadQualityChange(newQuality)
-          },
+          checked = downloadQuality.canonical() == quality,
+          onCheckedChange = { onDownloadQualityChange(quality) },
           modifier = Modifier.weight(1f).height(48.dp).semantics { role = Role.RadioButton }
         ) {
-          Text(text = label, style = MaterialTheme.typography.bodyMedium)
+          val label = if (quality == DownloadQuality.DATA_SAVER) R.string.ft_download_quality_saver else R.string.ft_download_quality_high
+          Text(text = stringResource(label), style = MaterialTheme.typography.bodyMedium)
         }
       }
     }
+    Text(
+      text = stringResource(R.string.ft_download_quality_applies),
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(horizontal = 16.dp)
+    )
   }
 }
 

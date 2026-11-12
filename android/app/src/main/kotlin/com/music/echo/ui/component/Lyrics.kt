@@ -121,6 +121,7 @@ import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.DefaultPlayerAppearance
 import echo.music.iad1tya.constants.AiProviderKey
 import echo.music.iad1tya.constants.AutoTranslateKey
 import echo.music.iad1tya.constants.DarkModeKey
@@ -258,7 +259,7 @@ fun Lyrics(
   val playerBackground by
     rememberEnumPreference(
       key = PlayerBackgroundStyleKey,
-      defaultValue = PlayerBackgroundStyle.GRADIENT
+      defaultValue = DefaultPlayerAppearance.BACKGROUND_STYLE
     )
 
   val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
@@ -2179,7 +2180,7 @@ fun Lyrics(
                   Intent().apply {
                     action = Intent.ACTION_SEND
                     type = "text/plain"
-                    val songLink = "https://share.echomusic.fun/watch?v=${mediaMetadata?.id}"
+                    val songLink = mediaMetadata?.id?.let { echo.music.iad1tya.utils.youtubeSongLink(it) }.orEmpty()
                     putExtra(
                       Intent.EXTRA_TEXT,
                       "\"$lyricsText\"\n\n$songTitle - $artists\n$songLink"

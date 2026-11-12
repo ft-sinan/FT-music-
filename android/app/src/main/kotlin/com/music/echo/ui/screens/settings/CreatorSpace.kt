@@ -115,13 +115,6 @@ fun CreatorSpace(onCredits: () -> Unit) {
         CreatorLink("Website", R.drawable.website) { open("https://sinanmk.my.id") }
       }
       Spacer(Modifier.height(12.dp))
-      Text(
-        "Built on Echo Music by Aditya and contributors.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
-      Spacer(Modifier.height(8.dp))
       OutlinedButton(onClick = onCredits) { Text("Credits & licences") }
     }
   }

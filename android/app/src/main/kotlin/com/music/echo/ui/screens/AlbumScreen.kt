@@ -835,7 +835,9 @@ fun AlbumScreen(
                     type = "text/plain"
                     putExtra(
                       android.content.Intent.EXTRA_TEXT,
-                      "https://share.echomusic.fun/playlist?list=${albumWithSongs.album.playlistId}"
+                      albumWithSongs.album.playlistId?.takeIf { it.isNotBlank() }
+                        ?.let { "https://music.youtube.com/playlist?list=${it.removePrefix("VL")}" }
+                        ?: albumWithSongs.album.title
                     )
                   }
                 context.startActivity(android.content.Intent.createChooser(intent, null))

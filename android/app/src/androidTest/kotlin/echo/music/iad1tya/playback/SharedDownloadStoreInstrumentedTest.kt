@@ -25,6 +25,7 @@ import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import echo.music.iad1tya.constants.DownloadQuality
 import echo.music.iad1tya.db.InternalDatabase
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.db.entities.FormatEntity
@@ -32,6 +33,7 @@ import echo.music.iad1tya.db.entities.SongEntity
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.MediaMetadata
 import echo.music.iad1tya.playback.queues.ListQueue
+import echo.music.iad1tya.utils.findShareableAudio
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -63,6 +65,7 @@ class SharedDownloadStoreInstrumentedTest {
   private lateinit var cache: SimpleCache
   private lateinit var playerCache: SimpleCache
   private lateinit var store: SharedDownloadStore
+  private lateinit var sources: DownloadSourceRegistry
   private lateinit var tracker: ActivePlaybackTracker
   private var util: DownloadUtil? = null
   private var serviceConnection: ServiceConnection? = null
@@ -81,7 +84,8 @@ class SharedDownloadStoreInstrumentedTest {
     cache = SimpleCache(File(context.cacheDir, "download-test-$id"), NoOpCacheEvictor(), provider)
     playerCache = SimpleCache(File(context.cacheDir, "player-test-$id"), NoOpCacheEvictor(), provider)
     tracker = ActivePlaybackTracker()
-    store = SharedDownloadStore(context, cache, database, tracker)
+    sources = DownloadSourceRegistry(context)
+    store = SharedDownloadStore(context, cache, database, tracker, sources)
   }
 
   @After fun teardown() {
@@ -93,11 +97,12 @@ class SharedDownloadStoreInstrumentedTest {
       }
     }
     File(context.filesDir, "$id-local.wav").delete()
-    runBlocking { store.delete(id) }
     util?.let { current ->
-      instrumentation.runOnMainSync { current.downloadManager.release() }
       current.release()
+      instrumentation.runOnMainSync { current.downloadManager.release() }
     }
+    runBlocking { store.delete(id) }
+    sources.remove(id)
     cache.release()
     playerCache.release()
     database.close()
@@ -136,7 +141,7 @@ class SharedDownloadStoreInstrumentedTest {
   private fun createUtil(download: Download): DownloadUtil {
     DefaultDownloadIndex(provider).putDownload(download)
     lateinit var created: DownloadUtil
-    instrumentation.runOnMainSync { created = DownloadUtil(context, database, provider, cache, playerCache, store) }
+    instrumentation.runOnMainSync { created = DownloadUtil(context, database, provider, cache, store, sources) }
     util = created
     return created
   }
@@ -186,6 +191,7 @@ class SharedDownloadStoreInstrumentedTest {
     assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
     val uri = store.recordedUri(id)!!
     assertEquals(SharedDownloadStore.FileState.PRESENT, store.state(id))
+    assertEquals(uri, store.verifiedUriForSharing(id))
     assertArrayEquals(bytes, read(uri))
     val metadata = MediaMetadataRetriever()
     try {
@@ -197,6 +203,66 @@ class SharedDownloadStoreInstrumentedTest {
     assertEquals(SharedDownloadStore.FileState.UNKNOWN, store.state(id))
   }
 
+  @Test fun publicationUsesDownloadedSourceNotThePlayersLatestFormat() = runBlocking {
+    val download = seed()
+    sources.qualityFor(id, DownloadQuality.HIGH)
+    assertTrue(sources.acceptSource(id, DownloadSourceIdentity(1, "audio/wav", bytes.size.toLong(), null), false))
+    // Simulate MusicService resolving a different container for the same song.
+    database.upsert(FormatEntity(id, 140, "audio/mp4", "mp4a.40.2", 128000, 44100, 999L, null, null, null))
+    assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
+    val uri = store.recordedUri(id)!!
+    assertArrayEquals(bytes, read(uri))
+    if (uri.scheme == "file") assertTrue(uri.path!!.endsWith(".wav"))
+    else {
+      // Some MediaStore versions canonicalize audio/wav to audio/x-wav.
+      assertTrue(context.contentResolver.getType(uri) in setOf("audio/wav", "audio/x-wav"))
+      val name = context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)!!.use {
+        assertTrue(it.moveToFirst())
+        it.getString(0)
+      }
+      assertTrue(name.endsWith(".wav"))
+    }
+  }
+
+  @Test fun mismatchedSourceLengthCannotPublishOrDeletePrivateBytes() = runBlocking {
+    val download = seed()
+    sources.qualityFor(id, DownloadQuality.HIGH)
+    assertTrue(sources.acceptSource(id, DownloadSourceIdentity(1, "audio/wav", bytes.size.toLong() + 1, null), false))
+    assertEquals(SharedDownloadStore.PublishResult.UNAVAILABLE, store.publish(download))
+    assertFalse(store.hasRecord(id))
+    assertTrue(cache.getCachedSpans(id).isNotEmpty())
+  }
+
+  @Test fun sourceQualityAndFormatSurviveRegistryRecreation() {
+    val first = DownloadSourceIdentity(251, "audio/webm", 1234L, "revision-1")
+    assertEquals(DownloadQuality.HIGH, sources.qualityFor(id, DownloadQuality.YOUTUBE))
+    assertTrue(sources.acceptSource(id, first, false))
+    val afterRestart = DownloadSourceRegistry(context)
+    assertEquals(DownloadQuality.HIGH, afterRestart.qualityFor(id, DownloadQuality.DATA_SAVER))
+    assertTrue(afterRestart.acceptSource(id, first, true))
+    assertFalse(afterRestart.acceptSource(id, first.copy(itag = 140, mimeType = "audio/mp4"), true))
+    assertEquals(first, afterRestart.sourceFor(id))
+    afterRestart.remove(id)
+    assertEquals(DownloadQuality.DATA_SAVER, afterRestart.qualityFor(id, DownloadQuality.DATA_SAVER))
+  }
+
+  @Test fun orphanedIdentityDoesNotOverrideANewDownloadChoice() {
+    sources.qualityFor(id, DownloadQuality.HIGH)
+    sources.prune(emptySet())
+    assertEquals(DownloadQuality.DATA_SAVER, sources.qualityFor(id, DownloadQuality.DATA_SAVER))
+    sources.prune(setOf(id))
+    assertEquals(DownloadQuality.DATA_SAVER, DownloadSourceRegistry(context).qualityFor(id, DownloadQuality.HIGH))
+  }
+
+  @Test fun legacyPartialIsPreservedAndRequiresExplicitRemoval() = runBlocking {
+    seed(cachedBytes = bytes.size / 3)
+    sources.qualityFor(id, DownloadQuality.DATA_SAVER)
+    val newSource = DownloadSourceIdentity(140, "audio/mp4", bytes.size.toLong(), null)
+    assertFalse(sources.acceptSource(id, newSource, hasCachedBytes = true))
+    assertTrue(cache.getCachedSpans(id).isNotEmpty())
+    assertEquals(null, sources.sourceFor(id))
+  }
+
   @Test fun deletingInFilesRemovesTheDownloadOnRefresh() = runBlocking {
     val download = seed()
     assertEquals(SharedDownloadStore.PublishResult.PUBLISHED, store.publish(download))
@@ -206,6 +272,63 @@ class SharedDownloadStoreInstrumentedTest {
     awaitRemoval(downloadUtil)
     awaitSharedRemoval(downloadUtil)
     assertFalse(store.hasRecord(id))
+  }
+
+  private fun recordPrivateSource() {
+    sources.qualityFor(id, DownloadQuality.HIGH)
+    assertTrue(sources.acceptSource(id, DownloadSourceIdentity(1, "audio/wav", bytes.size.toLong(), "test"), false))
+  }
+
+  @Test fun completePrivateDownloadCanBeSharedAndIsCleanedOnRemoval() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    val copy = requireNotNull(store.copyPrivateForSharing(download) { true }) {
+      "A verified completed private download should be shareable"
+    }
+    try {
+      assertArrayEquals(bytes, copy.file.readBytes())
+      val audio = findShareableAudio(context, store, Uri.fromFile(copy.file).toString(), copy.mimeType)
+      assertTrue("The temporary file must contain a playable audio track", audio != null)
+      assertArrayEquals(bytes, context.contentResolver.openInputStream(audio!!.uri)!!.use { it.readBytes() })
+      assertFalse(store.hasRecord(id))
+      assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
+      assertTrue(store.delete(id))
+      assertFalse("Removing a download should clear its temporary share copies", copy.file.exists())
+    } finally {
+      copy.file.delete()
+    }
+  }
+
+  @Test fun completeButUnidentifiedPrivateDownloadCannotBeShared() = runBlocking {
+    val download = seed()
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
+  }
+
+  @Test fun partialPrivateDownloadCannotBeShared() = runBlocking {
+    val download = seed(cachedBytes = bytes.size / 2)
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    recordPrivateSource()
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+    assertTrue(cache.getCachedSpans(id).isNotEmpty())
+  }
+
+  @Test fun downloadBeingRemovedCannotBeShared() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    store.markRemovalPending(id)
+    assertEquals(null, store.copyPrivateForSharing(download) { true })
+  }
+
+  @Test fun changedDownloadDoesNotLeaveAUsableTemporaryCopy() = runBlocking {
+    val download = seed()
+    recordPrivateSource()
+    val directory = File(context.cacheDir, "ft-song-share")
+    val before = directory.listFiles()?.map { it.name }?.toSet().orEmpty()
+    var checks = 0
+    assertEquals(null, store.copyPrivateForSharing(download) { ++checks == 1 })
+    assertEquals(before, directory.listFiles()?.map { it.name }?.toSet().orEmpty())
+    assertTrue(cache.isCached(id, 0, bytes.size.toLong()))
   }
 
   @Test fun removingInTheAppDeletesTheSharedFile() = runBlocking {
@@ -353,6 +476,7 @@ class SharedDownloadStoreInstrumentedTest {
     val edited = bytes.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 1).toByte() }
     context.contentResolver.openOutputStream(uri, "w")!!.use { it.write(edited) }
     try {
+      assertEquals(null, store.verifiedUriForSharing(id))
       store.delete(id)
       assertArrayEquals(edited, read(uri))
     } finally {

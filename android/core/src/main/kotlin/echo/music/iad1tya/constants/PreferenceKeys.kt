@@ -150,7 +150,18 @@ enum class AudioQuality(
 val DownloadQualityKey = stringPreferencesKey("downloadQuality")
 
 enum class DownloadQuality {
+  // Retained so an existing preference from earlier FT Music releases still means High.
   YOUTUBE,
+  HIGH,
+  DATA_SAVER;
+
+  fun canonical(): DownloadQuality = if (this == YOUTUBE) HIGH else this
+
+  /** InnerTubeX distinguishes HIGH from LOW; it does not promise a specific bitrate or codec. */
+  fun resolverQuality(): AudioQuality = when (canonical()) {
+    DATA_SAVER -> AudioQuality.LOW
+    HIGH, YOUTUBE -> AudioQuality.HIGH
+  }
 }
 
 val DownloadOnWifiOnlyKey = booleanPreferencesKey("downloadOnWifiOnly")
@@ -195,8 +206,6 @@ val PreventDuplicateTracksInQueueKey = booleanPreferencesKey("preventDuplicateTr
 val CrossfadeEnabledKey = booleanPreferencesKey("crossfadeEnabled")
 val CrossfadeDurationKey = floatPreferencesKey("crossfadeDuration")
 val CrossfadeGaplessKey = booleanPreferencesKey("crossfadeGapless")
-val AutomixCrossfadeKey = booleanPreferencesKey("automixCrossfade")
-val AutomixDebugOverlayKey = booleanPreferencesKey("automixDebugOverlay")
 
 val MaxImageCacheSizeKey = intPreferencesKey("maxImageCacheSize")
 val MaxSongCacheSizeKey = intPreferencesKey("maxSongCacheSize")
@@ -482,6 +491,12 @@ enum class PlayerBackgroundStyle {
   APPLE_MUSIC,
   LIVE_MESH,
   LIQUID_GLASS,
+}
+
+/** The Apple-inspired layout uses the legacy/inverted design flag. */
+object DefaultPlayerAppearance {
+  const val USE_NEW_PLAYER_DESIGN = false
+  val BACKGROUND_STYLE = PlayerBackgroundStyle.APPLE_MUSIC
 }
 
 val TopSize = stringPreferencesKey("topSize")

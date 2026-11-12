@@ -394,7 +394,7 @@
     <string name="enable_scrobbling">Activar scrobbling</string>
     <string name="lastfm_now_playing">Enviar estado \"Reproduciendo ahora\"</string>
     <string name="last_fm_send_likes">Sincronizar Me gusta</string>
-    <string name="last_fm_send_likes_description">Marca o desmarca las canciones como favoritas en Last.fm cuando les das o quitas el Me gusta en echomusic</string>
+    <string name="last_fm_send_likes_description">Marca o desmarca las canciones como favoritas en Last.fm cuando les das o quitas el Me gusta en FT Music</string>
     <string name="logging_in">Iniciando sesión…</string>
 
     <string name="scrobbling_configuration">Configuración de scrobbling</string>
@@ -481,19 +481,18 @@
     <string name="wrapped_total_artists_subtitle">artistas diferentes</string>
     <string name="wrapped_total_songs_title">Escuchaste</string>
     <string name="wrapped_total_songs_subtitle">canciones diferentes</string>
-    <string name="wrapped_intro_title">echomusic</string>
+    <string name="wrapped_intro_title">FT Music</string>
     <string name="wrapped_intro_subtitle">es hora de ver lo que has estado escuchando</string>
     <string name="wrapped_intro_button">¡vamos!</string>
-    <string name="wrapped_end_thanks">¡Gracias por escuchar música con echomusic!</string>
+    <string name="wrapped_end_thanks">¡Gracias por escuchar música con FT Music!</string>
     <string name="wrapped_end_create_playlist">Crear tu lista Wrapped</string>
     <string name="wrapped_end_creating_playlist">Creando...</string>
     <string name="wrapped_end_playlist_saved">Lista guardada</string>
-    <string name="wrapped_logo_content_description">Logo de echomusic</string>
+    <string name="wrapped_logo_content_description">Logo de FT Music</string>
     <string name="wrapped_year">2025</string>
     <string name="wrapped_ready_title">¡TU WRAPPED ESTÁ LISTO!</string>
     <string name="wrapped_ready_subtitle">Es hora de ver lo que más te gustó este año.</string>
     <string name="wrapped_thank_you">Gracias por escuchar</string>
-    <string name="wrapped_special_thanks">Un agradecimiento especial a echodh por crear echomusic</string>
     <string name="wrapped_close">Cerrar Wrapped</string>
     <string name="wrapped_playlist_title">Tu Wrapped %s</string>
     <string name="wrapped_create_playlist">Crear lista de reproducción</string>
@@ -567,9 +566,9 @@
     <string name="plays">reproducciones</string>
     <string name="casting_to">Transmitiendo a %s</string>
     <string name="progress_percent">Progreso %s%%</string>
-    <string name="listening_to_echomusic">Escuchando en echomusic</string>
+    <string name="listening_to_echomusic">Escuchando en FT Music</string>
     <string name="listen_on_youtube_music">Escuchar en YouTube Music</string>
-    <string name="visit_echomusic">Visitar echomusic</string>
+    <string name="visit_echomusic">Visitar FT Music</string>
     <string name="open">Abrir</string>
     <string name="failed_to_create_image">Error al crear la imagen: %s</string>
     <string name="copied_title">Título copiado</string>
@@ -586,13 +585,13 @@
     <!-- Widget strings -->
     <string name="album_art">Portada del álbum</string>
     <string name="no_song_playing">No hay ninguna canción sonando</string>
-    <string name="tap_to_open">Toca para abrir echomusic</string>
+    <string name="tap_to_open">Toca para abrir FT Music</string>
     <string name="previous">Anterior</string>
     <string name="play_pause">Reproducir/Pausar</string>
     <string name="next">Siguiente</string>
     <string name="like">Me gusta</string>
     <string name="not_playing">No hay ninguna canción sonando</string>
-    <string name="tap_to_play">Toca para abrir echomusic</string>
+    <string name="tap_to_play">Toca para abrir FT Music</string>
     <string name="widget_description">Widget del reproductor de música con controles de reproducción</string>
     <string name="queue_widget_description">Reproductor de música con vista previa de la cola</string>
     <string name="turntable_widget_description">Widget circular de música con controles de reproducción y Me gusta</string>
@@ -804,7 +803,7 @@
     <string name="crash_share_logs">Compartir registros</string>
     <string name="copy_logs">Copiar registros</string>
     <string name="crash_share_title">Compartir informe de fallos</string>
-    <string name="crash_report_subject">Informe de fallos de echomusic</string>
+    <string name="crash_report_subject">Informe de fallos de FT Music</string>
     <string name="crash_close">Cerrar</string>
     <string name="crash_no_log">No hay registro de fallos disponible</string>
 
@@ -895,9 +894,9 @@
     <string name="discord_rpc_preview">Vista previa de Rich Presence</string>
     <string name="discord_presence">Presencia</string>
     <string name="discord_connect_description">Inicia sesión con Discord para compartir lo que estás escuchando</string>
-    <string name="discord_playing_echomusic">Jugando a echomusic</string>
-    <string name="discord_watching_echomusic">Viendo echomusic</string>
-    <string name="discord_competing_echomusic">Compitiendo en echomusic</string>
+    <string name="discord_playing_echomusic">Jugando a FT Music</string>
+    <string name="discord_watching_echomusic">Viendo FT Music</string>
+    <string name="discord_competing_echomusic">Compitiendo en FT Music</string>
     <string name="discord_activity_name">Nombre de la actividad</string>
     <string name="discord_activity_name_description">Nombre personalizado para la actividad (déjalo vacío para usar el predeterminado)</string>
     <string name="discord_advanced_mode">Modo avanzado</string>
@@ -957,7 +956,7 @@
 
     <string name="perm_required">Obligatorios</string>
     <string name="perm_permissions">Permisos</string>
-    <string name="perm_intro_text">Estos permisos son necesarios para que echomusic funcione correctamente. Concédelos para continuar.</string>
+    <string name="perm_intro_text">Estos permisos son necesarios para que FT Music funcione correctamente. Concédelos para continuar.</string>
 
     <string name="perm_notif_title">Notificaciones</string>
     <string name="perm_notif_desc">Sabe al instante qué está sonando y controla tu música desde la barra de notificaciones.</string>
@@ -967,7 +966,7 @@
 
     <string name="feat_discover">Descubre</string>
     <string name="feat_features">Funciones</string>
-    <string name="feat_intro">Explora todo lo que echomusic tiene para ofrecer en tu experiencia musical.</string>
+    <string name="feat_intro">Explora todo lo que FT Music tiene para ofrecer en tu experiencia musical.</string>
 
     <string name="feat_lyrics_title">Letras inteligentes</string>
     <string name="feat_lyrics_desc">Disfruta de letras sincronizadas palabra por palabra para millones de canciones.</string>
@@ -991,7 +990,7 @@
     <string name="welcome_update_status">Actualizado</string>
     <string name="welcome_update_intro">Nos aseguramos de que tengas las últimas funciones y mejoras de seguridad.</string>
     <string name="welcome_checking_updates">Buscando actualizaciones…</string>
-    <string name="welcome_up_to_date">¡echomusic está actualizado!</string>
+    <string name="welcome_up_to_date">¡FT Music está actualizado!</string>
     <string name="welcome_update_available">Nueva versión disponible: %s</string>
     <string name="welcome_everything_ready">Todo está listo y actualizado</string>
     <string name="commits_title">Commits</string>

@@ -63,7 +63,11 @@ constructor(
   private var cachedBannerAlbumArt: Bitmap? = null
   private var cachedAccentColor: Int = 0xFFA855F7.toInt()
 
-  suspend fun updateWidgets(
+  internal fun hasLyricsWidget(): Boolean =
+    AppWidgetManager.getInstance(context)
+      .getAppWidgetIds(ComponentName(context, FTLyricsWidgetReceiver::class.java)).isNotEmpty()
+
+  internal suspend fun updateWidgets(
     title: String,
     artist: String,
     artworkUri: String?,
@@ -74,7 +78,9 @@ constructor(
     isShuffle: Boolean = false,
     repeatMode: Int = 0,
     isMuted: Boolean = false,
-    queueItems: List<WidgetQueueItem> = emptyList()
+    queueItems: List<WidgetQueueItem> = emptyList(),
+    lyrics: WidgetLyrics = WidgetLyrics.Unavailable,
+    shouldApply: () -> Boolean = { true },
   ) {
     val appWidgetManager = AppWidgetManager.getInstance(context)
 
@@ -104,6 +110,21 @@ constructor(
       cachedRoundedAlbumArt = roundedAlbumArt
       cachedBannerAlbumArt = bannerAlbumArt
       cachedAccentColor = accentColor
+    }
+
+    // A prior track's artwork may finish after a song change.
+    if (!shouldApply()) return
+
+    // New FT designs are additional providers; no existing widget is replaced.
+    val lyricsIds = appWidgetManager.getAppWidgetIds(ComponentName(context, FTLyricsWidgetReceiver::class.java))
+    if (lyricsIds.isNotEmpty()) {
+      val views = createLyricsRemoteViews(title, artist, roundedAlbumArt, isPlaying, isLiked, duration, currentPosition, lyrics)
+      lyricsIds.forEach { appWidgetManager.updateAppWidget(it, views) }
+    }
+    val compactIds = appWidgetManager.getAppWidgetIds(ComponentName(context, FTCompactWidgetReceiver::class.java))
+    if (compactIds.isNotEmpty()) {
+      val views = createFtCompactRemoteViews(title, artist, roundedAlbumArt, isPlaying, duration, currentPosition)
+      compactIds.forEach { appWidgetManager.updateAppWidget(it, views) }
     }
 
     // Update main music player widgets
@@ -957,6 +978,99 @@ constructor(
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+  }
+
+  private fun createLyricsRemoteViews(
+    title: String,
+    artist: String,
+    artwork: Bitmap?,
+    playing: Boolean,
+    liked: Boolean,
+    duration: Long,
+    position: Long,
+    lyrics: WidgetLyrics,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.widget_ft_lyrics)
+    views.setTextViewText(R.id.widget_song_title, title)
+    views.setTextViewText(R.id.widget_artist_name, artist)
+    views.setImageViewBitmap(R.id.widget_album_art, artwork ?: getRoundedDefaultIcon(36f))
+    views.setImageViewResource(
+      R.id.widget_play_pause,
+      if (playing) R.drawable.ic_widget_pause_bold_white else R.drawable.ic_widget_play_bold_white,
+    )
+    views.setImageViewResource(
+      R.id.widget_like_button,
+      if (liked) R.drawable.ic_widget_heart_filled_clean else R.drawable.ic_widget_heart_clean,
+    )
+    val (status, current, next) = when (lyrics) {
+      WidgetLyrics.Loading -> Triple(
+        context.getString(R.string.widget_lyrics_label),
+        context.getString(R.string.widget_lyrics_loading), ""
+      )
+      WidgetLyrics.Unavailable -> Triple(
+        context.getString(R.string.widget_lyrics_label),
+        context.getString(R.string.widget_lyrics_unavailable), ""
+      )
+      is WidgetLyrics.Untimed -> Triple(context.getString(R.string.widget_lyrics_unsynced), lyrics.text, "")
+      is WidgetLyrics.Timed -> {
+        val frame = lyrics.at(position)
+        Triple(
+          context.getString(R.string.widget_lyrics_synced),
+          frame.current?.ifBlank { context.getString(R.string.widget_lyrics_instrumental) }
+            ?: context.getString(R.string.widget_lyrics_begin_soon),
+          frame.next.orEmpty(),
+        )
+      }
+    }
+    views.setTextViewText(R.id.widget_lyrics_status, status)
+    views.setTextViewText(R.id.widget_lyrics_current, current)
+    views.setTextViewText(R.id.widget_lyrics_next, next)
+    setFtProgress(views, duration, position)
+    views.setTextViewText(R.id.widget_time_current, formatDuration(position))
+    views.setTextViewText(R.id.widget_time_duration, formatDuration(duration))
+    views.setOnClickPendingIntent(R.id.widget_album_art, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_song_title, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_artist_name, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_lyrics_area, getLyricsIntent())
+    views.setOnClickPendingIntent(R.id.widget_cast_button, getOutputSwitcherIntent())
+    views.setOnClickPendingIntent(R.id.widget_like_button, getLikeIntent())
+    views.setOnClickPendingIntent(R.id.widget_prev_button, getPreviousIntent())
+    views.setOnClickPendingIntent(R.id.widget_play_pause_container, getPlayPauseIntent())
+    views.setOnClickPendingIntent(R.id.widget_next_button, getNextIntent())
+    return views
+  }
+
+  private fun createFtCompactRemoteViews(
+    title: String,
+    artist: String,
+    artwork: Bitmap?,
+    playing: Boolean,
+    duration: Long,
+    position: Long,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.widget_ft_compact)
+    views.setTextViewText(R.id.widget_song_title, title)
+    views.setTextViewText(R.id.widget_artist_name, artist)
+    views.setImageViewBitmap(R.id.widget_album_art, artwork ?: getRoundedDefaultIcon(36f))
+    views.setImageViewResource(
+      R.id.widget_play_pause,
+      if (playing) R.drawable.ic_widget_pause_bold_white else R.drawable.ic_widget_play_bold_white,
+    )
+    setFtProgress(views, duration, position)
+    views.setOnClickPendingIntent(R.id.widget_album_art, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_song_title, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_artist_name, getNowPlayingIntent())
+    views.setOnClickPendingIntent(R.id.widget_prev_button, getPreviousIntent())
+    views.setOnClickPendingIntent(R.id.widget_play_pause, getPlayPauseIntent())
+    views.setOnClickPendingIntent(R.id.widget_next_button, getNextIntent())
+    return views
+  }
+
+  private fun setFtProgress(views: RemoteViews, duration: Long, position: Long) {
+    val level = if (duration > 0) {
+      ((position.toDouble() / duration) * 10_000).toInt().coerceIn(0, 10_000)
+    } else 0
+    views.setInt(R.id.widget_progress_fill, "setImageLevel", level)
   }
 
   private fun createModernFlowRemoteViews(

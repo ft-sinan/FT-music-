@@ -117,6 +117,7 @@ import coil3.compose.AsyncImage
 import echo.music.iad1tya.LocalListenTogetherManager
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.DefaultPlayerAppearance
 import echo.music.iad1tya.constants.ListItemHeight
 import echo.music.iad1tya.constants.PlayerBackgroundStyle
 import echo.music.iad1tya.constants.QueueEditLockKey
@@ -283,7 +284,7 @@ fun Queue(
   var locked by rememberPreference(QueueEditLockKey, defaultValue = false)
 
   val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
-    rememberPreference(UseNewPlayerDesignKey, defaultValue = true)
+    rememberPreference(UseNewPlayerDesignKey, defaultValue = DefaultPlayerAppearance.USE_NEW_PLAYER_DESIGN)
   val (showCommentButton) = rememberPreference(ShowCommentButtonKey, defaultValue = false)
 
   val coroutineScope = rememberCoroutineScope()

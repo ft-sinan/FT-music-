@@ -388,7 +388,12 @@ fun StorageSettings(
             isHighlighted = (highlightKey == stringResource(R.string.clear_song_cache)),
             icon = painterResource(R.drawable.cached),
             title = { Text(stringResource(R.string.clear_song_cache)) },
-            description = { Text("${formatFileSize(playerCacheSize)} used") },
+            description = {
+              Column {
+                Text("${formatFileSize(playerCacheSize)} used")
+                Text(stringResource(R.string.song_cache_expiry_note))
+              }
+            },
             onClick = { clearCacheDialog = true }
           )
         )
