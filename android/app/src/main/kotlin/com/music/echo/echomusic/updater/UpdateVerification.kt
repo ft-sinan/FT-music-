@@ -33,13 +33,13 @@ const val PINNED_SIGNING_CERT_SHA256 =
  * supports 26; passing an unrecognised bit to an older framework is harmless, and the deprecated
  * flag alongside it is what makes Android 9 and 10 collect anything at all.
  */
-private const val GET_SIGNING_CERTIFICATES_VALUE = 0x08000000
-
-/** [PackageManager.GET_SIGNATURES], spelled as its value because it is deprecated since API 28. */
-private const val GET_SIGNATURES_VALUE = 0x00000040
-
-private const val ARCHIVE_SIGNING_FLAGS: Int =
-  GET_SIGNING_CERTIFICATES_VALUE or GET_SIGNATURES_VALUE
+/**
+ * `PackageManager.GET_SIGNING_CERTIFICATES` (0x08000000, API 28+) combined with the deprecated
+ * `PackageManager.GET_SIGNATURES` (0x00000040). Both are spelled as their values so the same flags
+ * can be requested on API 26 and 27, where the modern constant does not exist; an older framework
+ * simply ignores a bit it does not know. The values are the ones AOSP declares.
+ */
+private const val ARCHIVE_SIGNING_FLAGS = 0x08000040
 
 /** The release asset FT Music publishes checksums in. */
 const val CHECKSUM_ASSET_NAME = "SHA256SUMS.txt"

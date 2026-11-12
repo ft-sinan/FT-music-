@@ -156,7 +156,7 @@ class ForkConfigurationTest(unittest.TestCase):
         # 0x08000000 is GET_SIGNING_CERTIFICATES, 0x00000040 is GET_SIGNATURES.
         self.assertIn("0x08000000", verify)
         self.assertIn("0x00000040", verify)
-        self.assertIn("GET_SIGNING_CERTIFICATES_VALUE or GET_SIGNATURES_VALUE", verify)
+        self.assertIn("ARCHIVE_SIGNING_FLAGS = 0x08000040", verify)
         self.assertIn("pinnedDigestAmong(digests) != null", verify)
         self.assertIn("if (!downloadVerified && !signatureUnreadable)", screen)
         self.assertIn("SignatureMatch.DIFFERENT ->", screen)
