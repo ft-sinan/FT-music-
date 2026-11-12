@@ -1219,6 +1219,7 @@ class MainActivity : ComponentActivity() {
         val ringtoneViewModel: RingtoneViewModel = viewModel()
         val ringtoneUiState by ringtoneViewModel.uiState.collectAsState()
         val localAudioDeletion: LocalAudioDeletionViewModel = hiltViewModel()
+        val localSongInfo: LocalSongInfoViewModel = hiltViewModel()
 
         val customHapticFeedback =
           remember(hapticHelper) {
@@ -1245,6 +1246,7 @@ class MainActivity : ComponentActivity() {
           LocalAppBackdrop provides appBackdrop,
           LocalRingtoneViewModel provides ringtoneViewModel,
           LocalAudioDeletion provides localAudioDeletion,
+          LocalSongInfo provides localSongInfo,
           LocalDatabase provides database,
           LocalContentColor provides
             if (pureBlack) Color.White else contentColorFor(MaterialTheme.colorScheme.surface),
@@ -1266,6 +1268,7 @@ class MainActivity : ComponentActivity() {
               onFinished = localAudioDeletion::clear,
             )
           }
+          localSongInfo.selectedSong?.let { LocalSongInfoDialog(onDismiss = localSongInfo::clear) }
           Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {

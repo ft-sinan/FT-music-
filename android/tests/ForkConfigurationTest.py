@@ -330,6 +330,70 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("enableExportAsMp3", menus)
 
 
+    def test_local_song_info_edits_the_file_without_reencoding_audio(self):
+        localmedia = MAIN / "kotlin/com/music/echo/localmedia"
+        tags = (localmedia / "AudioTagEdit.kt").read_text()
+        writer = (localmedia / "AudioTagWriter.kt").read_text()
+        editor = (localmedia / "LocalSongInfoEditor.kt").read_text()
+        # Retagging copies streams; it never decodes or re-encodes the audio.
+        self.assertIn('" -map 0:a:0 -map 1:v:0 -c:a copy -c:v $codec -disposition:v attached_pic"', tags)
+        self.assertIn("-map 0 -c copy$mp3Id3$metadata", tags)
+        self.assertNotIn("libmp3lame", tags)
+        self.assertNotIn("-b:a", tags)
+        # Only containers ffmpeg can really mux a picture into claim to support a cover.
+        self.assertIn("MP3(true)", tags)
+        self.assertIn("MP4(true)", tags)
+        self.assertIn("FLAC(true)", tags)
+        self.assertIn("OGG(false)", tags)
+        self.assertIn("WAV(false)", tags)
+        self.assertIn("MATROSKA(false)", tags)
+        # The rewritten file is checked before it replaces anything, and the descriptor is truncated
+        # so no stale tail survives a shorter write.
+        self.assertIn("private fun verify(", writer)
+        self.assertIn("sink.channel.truncate(0)", writer)
+        self.assertIn("data class Source(val file: File, val isTheUsersFile: Boolean)", writer)
+        self.assertIn("if (source.isTheUsersFile && original.canWrite())", writer)
+        # MediaStore and FT Music's own library are refreshed from the file that was written.
+        self.assertIn("MediaScannerConnection.scanFile", writer)
+        self.assertIn("database.transaction", writer)
+        self.assertIn("deleteSongArtistMaps(songId)", writer)
+        # A container that cannot hold a cover drops it rather than pretending to write one.
+        self.assertIn("if (container.supportsCover) coverBytes else null", editor)
+
+    def test_edit_info_reports_every_refusal_and_never_writes_before_apply(self):
+        localmedia = MAIN / "kotlin/com/music/echo/localmedia"
+        ui = MAIN / "kotlin/com/music/echo/ui/component"
+        menu = (MAIN / "kotlin/com/music/echo/ui/menu/SongMenu.kt").read_text()
+        activity = (MAIN / "kotlin/com/music/echo/MainActivity.kt").read_text()
+        dialog = (ui / "LocalSongInfoDialog.kt").read_text()
+        viewmodel = (ui / "LocalSongInfoViewModel.kt").read_text()
+        search = (localmedia / "TagSearchSource.kt").read_text()
+        strings = (MAIN / "res/values/echo_strings.xml").read_text()
+        # A local song's Edit entry writes into its file; online songs keep the database-only edit.
+        self.assertIn("localSongInfo.request(song)", menu)
+        self.assertIn("R.string.ft_edit_info_title else R.string.edit", menu)
+        self.assertIn("LocalSongInfo provides localSongInfo", activity)
+        self.assertIn("LocalSongInfoDialog(onDismiss = localSongInfo::clear)", activity)
+        # Suggestions come from a real YouTube Music song search the user accepts one at a time.
+        self.assertIn("YouTube.SearchFilter.FILTER_SONG", search)
+        self.assertIn("fun acceptResult(result: TagSearchResult)", viewmodel)
+        self.assertIn("fun apply()", viewmodel)
+        # Android's own permission prompt is launched, and refusing it is reported.
+        self.assertIn("StartIntentSenderForResult", dialog)
+        self.assertIn("viewModel.retryAfterPermission()", dialog)
+        self.assertIn("viewModel.permissionRefused()", dialog)
+        # Every refusal has a message of its own.
+        for failure in (
+            "UNSUPPORTED_FORMAT", "PERMISSION_DENIED", "NO_FILE", "WRITE_FAILED", "VERIFY_FAILED",
+        ):
+            self.assertIn(f"AudioTagEditFailure.{failure} ->", dialog)
+        for name in (
+            "ft_edit_info_failed_format", "ft_edit_info_failed_permission", "ft_edit_info_failed_nofile",
+            "ft_edit_info_failed_write", "ft_edit_info_failed_verify", "ft_edit_info_cover_unsupported",
+            "ft_edit_info_audio_note", "ft_edit_info_saved", "ft_edit_info_search_hint",
+        ):
+            self.assertIn(f'<string name="{name}">', strings)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

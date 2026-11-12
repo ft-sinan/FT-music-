@@ -85,6 +85,7 @@ import echo.music.iad1tya.ui.component.HeartBurstIcon
 import echo.music.iad1tya.ui.component.ListDialog
 import echo.music.iad1tya.ui.component.SongShareDialog
 import echo.music.iad1tya.ui.component.LocalAudioDeletion
+import echo.music.iad1tya.ui.component.LocalSongInfo
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.Material3MenuGroup
 import echo.music.iad1tya.ui.component.rememberLoadAnimationItem
@@ -128,6 +129,7 @@ fun SongMenu(
     LocalDownloadUtil.current.getDownload(originalSong.id).collectAsState(initial = null)
   val coroutineScope = rememberCoroutineScope()
   val localAudioDeletion = LocalAudioDeletion.current
+  val localSongInfo = LocalSongInfo.current
   val syncUtils = LocalSyncUtils.current
   val listenTogetherManager = LocalListenTogetherManager.current
   val scope = rememberCoroutineScope()
@@ -483,15 +485,35 @@ fun SongMenu(
               )
             } else null,
             Material3MenuItemData(
-              title = { Text(text = stringResource(R.string.edit)) },
-              description = { Text(text = stringResource(R.string.edit_song)) },
+              // A local song's tags live in its file, so editing means rewriting the file.
+              title = {
+                Text(
+                  text = stringResource(
+                    if (song.song.isLocal) R.string.ft_edit_info_title else R.string.edit
+                  )
+                )
+              },
+              description = {
+                Text(
+                  text = stringResource(
+                    if (song.song.isLocal) R.string.ft_edit_info_desc else R.string.edit_song
+                  )
+                )
+              },
               icon = {
                 Icon(
                   painter = painterResource(R.drawable.edit),
                   contentDescription = null,
                 )
               },
-              onClick = { showEditDialog = true }
+              onClick = {
+                if (song.song.isLocal) {
+                  localSongInfo.request(song)
+                  onDismiss()
+                } else {
+                  showEditDialog = true
+                }
+              }
             ),
             if (song.song.isLocal) {
               Material3MenuItemData(
