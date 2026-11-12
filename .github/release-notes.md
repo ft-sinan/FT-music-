@@ -1,4 +1,4 @@
-## FT Music v0.7.0
+## FT Music v0.8.0
 
 This Android release is a modified fork of [Echo Music](https://github.com/EchoMusicApp/Echo-Music), based on upstream commit `c0de840532aadc36a84475b63291fbc6452a1668`. Source and changes are available under GPLv3; see `android/LICENSE` and `android/UPSTREAM.md` for the license and attribution. FT Music is not affiliated with Echo Music.
 
@@ -40,6 +40,15 @@ If you use ADB, `adb shell getprop ro.product.cpu.abilist` lists the ABIs suppor
 - The playback source badge is simpler: **Local** for a downloaded song or a file on your device, with the real quality details preserved. The confusing "Streaming / cache" label is gone.
 - **Song DNA** and beat-matched **Automix** are removed. Ordinary crossfade remains, and YouTube's own automix/radio queues keep their separate names.
 
+**Updating from inside the app**
+
+- **Settings → App updates → Check for updates** shows the newest FT Music release with its version, release date, notes and the exact package it will install, and downloads it there. The APK is chosen for your phone from `Build.SUPPORTED_ABIS`, falling back to the universal package, so you are not asked to work out which architecture you have. If a release publishes nothing that fits your device, that is said plainly instead of offering a file Android would refuse.
+- Nothing installs silently, and nothing unverified installs at all. The download must match the SHA-256 that the release publishes in `SHA256SUMS.txt`, and the file's signing certificate must be FT Music's pinned one. A mismatch is discarded and reported rather than offered. Only then is the file handed to Android, which still shows its own confirmation and still needs "install unknown apps" permission.
+- The certificate check works on Android 8.0 and newer. Android 9 and 10 — and some Android 13 builds — only report an APK file's certificate when the older signature flag is requested, so both are asked for; without that, every genuine update would have looked unverifiable on exactly the older phones most likely to need one. If a device still cannot report the certificate, the app says so plainly, still requires the checksum to match, and lets Android's own signature check run.
+- This matters because Android's own refusal for a changed signature asks you to **uninstall first**, which would destroy your library, likes, playlists and downloads. Refusing before that point means you are never offered that choice by mistake.
+- Update notifications are on by default and check GitHub at most once a day when the app opens; finding an update never downloads or installs anything. Turn it off in **Settings → App updates**, where the automatic check on opening that screen is off by default and pre-releases stay opt-in under **Beta updates**. Tapping a notification opens the update screen, not the installer, so there is exactly one gate and it is the verified one.
+- Downloaded update packages are pruned: anything older than a day, and anything for a release other than the one now installed. The browser route — **Open FT Music releases** — still works exactly as before.
+
 **Widgets, sharing and naming**
 
 - New home-screen widgets in a mix of styles and sizes, including one that shows lyrics with a clear state when none are available. Existing widgets remain.
@@ -49,8 +58,8 @@ If you use ADB, `adb shell getprop ro.product.cpu.abilist` lists the ABIs suppor
 
 ### Important limitations
 
-The features above passed automated checks on emulators running Android 9, 10 and 15, including real downloads, offline playback, one-hour cache expiry, local-file deletion against the physical file, and tag editing against real published audio files. Physical-phone upgrades, YouTube sign-in and sync, and streaming against live YouTube have **not** been verified on a real device. Back up anything important before installing.
+The features above passed automated checks on emulators running Android 9, 10 and 15, including real downloads, offline playback, one-hour cache expiry, local-file deletion against the physical file, and tag editing against real published audio files. The updater's release discovery, ABI choice, checksum parsing and refusal paths are unit-tested, and its certificate check is tested against a real signed APK on an emulator. What has **not** been verified on a real device: a physical-phone upgrade end to end, YouTube sign-in and sync, and streaming against live YouTube. The updater could not be exercised against a published release before that release exists, so the first real use of in-app updating will be to move **from** v0.8.0 **to** a later version. Back up anything important before installing.
 
 Echo Music's optional YouTube account sign-in and sync are included. With sync enabled, actions in FT Music can also change liked songs and synced playlists in your YouTube account. Android Auto integration is not included; normal phone notification and lock-screen controls remain. YouTube and other third-party services may change or refuse requests at any time; check the provider's terms and download only content you are permitted to save.
 
-**Upgrading:** v0.7.0 installs in place over v0.5 and v0.6 — same package ID (`com.ftmusic.app`) and signing certificate, higher version code. This fork starts a fresh library: it does not import the pre-Echo v0.4 likes, playlists, downloads, lyrics, history or separate FT Music account sync, and Echo Music's own private download folder is not read. An in-place update does not intentionally erase those old files, but they will not appear in the new app. The original version remains available in the v0.4.0 release.
+**Upgrading:** v0.8.0 installs in place over v0.5, v0.6 and v0.7 — same package ID (`com.ftmusic.app`) and signing certificate, higher version code. This fork starts a fresh library: it does not import the pre-Echo v0.4 likes, playlists, downloads, lyrics, history or separate FT Music account sync, and Echo Music's own private download folder is not read. An in-place update does not intentionally erase those old files, but they will not appear in the new app. The original version remains available in the v0.4.0 release. In-app updating arrives **with** v0.8.0, so getting to v0.8.0 itself still means downloading an APK from this release page; every version after it can be installed from inside the app.

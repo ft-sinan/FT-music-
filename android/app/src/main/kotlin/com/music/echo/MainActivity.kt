@@ -275,6 +275,7 @@ class MainActivity : ComponentActivity() {
     const val ACTION_MEDIA_OUTPUT = "com.android.settings.panel.action.MEDIA_OUTPUT"
     const val EXTRA_MEDIA_OUTPUT_PACKAGE_NAME = "com.android.settings.panel.extra.PACKAGE_NAME"
     const val EXTRA_AUTO_START_RECOGNITION = "auto_start_recognition"
+    const val EXTRA_OPEN_UPDATE_SCREEN = "com.ftmusic.app.extra.OPEN_UPDATE_SCREEN"
   }
 
   @Inject lateinit var database: MusicDatabase
@@ -570,12 +571,60 @@ class MainActivity : ComponentActivity() {
         // version seen right away rather than waiting on a dialog dismissal.
         echo.music.iad1tya.echomusic.updater.saveLastSeenChangelogVersion(context, currentVersion)
       } else if (lastSeenVersion != currentVersion) {
-        // FT Music updates are checked manually on its own releases page.
         echo.music.iad1tya.echomusic.updater.saveLastSeenChangelogVersion(context, currentVersion)
       }
     }
 
-    // The upstream automatic updater is disabled for this fork.
+    // Local file work only: an update package for a release the user has moved past is dead weight.
+    LaunchedEffect(Unit) {
+      withContext(Dispatchers.IO) {
+        echo.music.iad1tya.echomusic.updater.clearStaleUpdateApks(context, BuildConfig.VERSION_NAME)
+      }
+    }
+
+    // FT Music looks for a newer release on its own only when the user turned on update
+    // notifications, and at most once a day. Finding one never downloads or installs anything:
+    // that stays a deliberate tap, and Android still shows its own install confirmation.
+    LaunchedEffect(Unit) {
+      if (!echo.music.iad1tya.echomusic.updater.isAutomaticUpdateCheckDue(context)) {
+        return@LaunchedEffect
+      }
+      echo.music.iad1tya.echomusic.updater.saveAutomaticUpdateCheckTime(context)
+      when (val outcome = echo.music.iad1tya.echomusic.updater.checkForUpdate(context)) {
+        is echo.music.iad1tya.echomusic.updater.UpdateCheckOutcome.Available -> {
+          echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState(context, true)
+          echo.music.iad1tya.echomusic.updater.saveLastSeenUpdateTag(context, outcome.version)
+          val alreadyOffered =
+            echo.music.iad1tya.echomusic.updater.getDismissedUpdateVersion(context) ==
+              outcome.version
+          if (!alreadyOffered) {
+            availableUpdateVersion = outcome.version
+            availableUpdateChangelog = outcome.changelog
+            availableUpdateDescription = outcome.description
+            showUpdateDialog = true
+          }
+          echo.music.iad1tya.echomusic.updater.UpdateNotification.showUpdateAvailable(
+            context = context,
+            version = outcome.version,
+            sizeMb = outcome.size,
+          )
+        }
+        is echo.music.iad1tya.echomusic.updater.UpdateCheckOutcome.NoPackageForDevice -> {
+          echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState(context, true)
+          echo.music.iad1tya.echomusic.updater.saveLastSeenUpdateTag(context, outcome.version)
+          echo.music.iad1tya.echomusic.updater.UpdateNotification.showNoPackageForDevice(
+            context,
+            outcome.version
+          )
+        }
+        is echo.music.iad1tya.echomusic.updater.UpdateCheckOutcome.UpToDate -> {
+          echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState(context, false)
+          echo.music.iad1tya.echomusic.updater.UpdateNotification.cancel(context)
+        }
+        // A failed check says nothing about whether an update exists, so nothing is claimed.
+        is echo.music.iad1tya.echomusic.updater.UpdateCheckOutcome.Failed -> Unit
+      }
+    }
 
     val HasShownBirthdayNotificationKey = remember {
       androidx.datastore.preferences.core.booleanPreferencesKey("has_shown_birthday_notification")
@@ -740,7 +789,17 @@ class MainActivity : ComponentActivity() {
           version = availableUpdateVersion,
           changelog = availableUpdateChangelog,
           description = availableUpdateDescription,
-          onDismiss = { showUpdateDialog = false }
+          onDismiss = {
+            echo.music.iad1tya.echomusic.updater.saveDismissedUpdateVersion(
+              context,
+              availableUpdateVersion
+            )
+            showUpdateDialog = false
+          },
+          onUpdate = {
+            showUpdateDialog = false
+            navController.navigate("update") { launchSingleTop = true }
+          }
         )
       } else {
         whatsNewInfo?.let { info ->
@@ -1091,6 +1150,7 @@ class MainActivity : ComponentActivity() {
           val activeIntent = pendingIntent ?: intent
           if (activeIntent != null) {
             handleWidgetAction(activeIntent)
+            handleUpdateScreenIntent(activeIntent, navController)
           }
           if (pendingIntent != null) {
             handleDeepLinkIntent(pendingIntent!!, navController)
@@ -1116,6 +1176,7 @@ class MainActivity : ComponentActivity() {
           val listener =
             Consumer<Intent> { newIntent ->
               handleWidgetAction(newIntent)
+              handleUpdateScreenIntent(newIntent, navController)
               if (newIntent.action == Intent.ACTION_VIEW || newIntent.action == Intent.ACTION_SEND) {
                 handleDeepLinkIntent(newIntent, navController)
               } else if (newIntent.action == ACTION_RECOGNITION) {
@@ -2042,6 +2103,20 @@ class MainActivity : ComponentActivity() {
       window.navigationBarColor =
         (if (isDark) Color.Transparent else Color.Black.copy(alpha = 0.2f)).toArgb()
     }
+  }
+
+  /**
+   * Opens the in-app update screen, which is where a downloaded package is verified before Android
+   * is asked to install it. Used by update notifications instead of pointing straight at the
+   * installer, so there is exactly one gate and it is the checked one.
+   */
+  private fun handleUpdateScreenIntent(
+    intent: Intent,
+    navController: NavHostController,
+  ) {
+    if (!intent.getBooleanExtra(EXTRA_OPEN_UPDATE_SCREEN, false)) return
+    intent.removeExtra(EXTRA_OPEN_UPDATE_SCREEN)
+    navController.navigate("update") { launchSingleTop = true }
   }
 
   private fun handleRecognitionIntent(

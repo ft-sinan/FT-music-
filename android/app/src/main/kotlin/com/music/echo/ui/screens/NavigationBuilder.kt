@@ -571,7 +571,8 @@ fun NavGraphBuilder.navigationBuilder(
     )
   }
 
-  composable("update") { UpdateSettings(navController, scrollBehavior) }
+  // The screen that shows a found release and installs it. Settings -> App updates leads here.
+  composable("update") { UpdateScreen(navController) }
 
   composable("login") { LoginScreen(navController) }
 

@@ -14,6 +14,7 @@
     <string name="version_progress">Version %1$s (%2$d%%)</string>
     <string name="update_ready">Update ready</string>
     <string name="tap_to_install_version">Tap to install version %1$s</string>
+    <string name="tap_to_review_version">Tap to review and install version %1$s</string>
     <string name="back_content_desc">Back</string>
     <string name="settings_title">Settings</string>
     <string name="changelog">Changelog</string>
@@ -38,6 +39,18 @@
     <string name="echo_music_version">FT Music version %1$s</string>
     <string name="last_checked">Last checked: %1$s</string>
     <string name="install">Install</string>
+    <string name="open_release_in_browser">Open release in browser</string>
+    <string name="update_package_name">Package: %1$s</string>
+    <string name="update_no_package_title">%1$s has no package for this device</string>
+    <string name="update_no_package_body">That release publishes APKs for other processor types only. Open the release page to see what is available.</string>
+    <string name="update_checksum_mismatch">The download did not match the published SHA-256, so it was discarded. Try again.</string>
+    <string name="update_signature_mismatch">That file is not signed by FT Music, so it was discarded and will not be installed.</string>
+    <string name="update_not_verified">This update cannot be verified, so it will not be downloaded. Open the release page instead.</string>
+    <string name="update_signature_unreadable">Android would not report this file\'s signing certificate. Its checksum does match the published one, and Android will still check the signature before installing.</string>
+    <string name="check_for_updates_in_app">Check for updates</string>
+    <string name="check_for_updates_in_app_subtitle">See the newest FT Music version, its notes, and install it from here</string>
+    <string name="beta_updates_subtitle_stable">Offer pre-releases too, not only stable versions</string>
+    <string name="updates_how_it_works">FT Music checks GitHub for a newer release, downloads the APK built for this device, verifies its published SHA-256 and signing certificate, then asks Android to install it. Android always shows its own confirmation, so nothing installs by itself.</string>
     <string name="check_for_update">Check for update</string>
     <string name="no_changelog_available">No changelog available</string>
     <string name="system_update">System update</string>
@@ -46,9 +59,9 @@
     <string name="app_updates_subtitle">App updates</string>
     <string name="app_update_uptodate">Up to date</string>
     <string name="auto_update_check">Automatic update check</string>
-    <string name="auto_update_check_subtitle">Automatically check for updates when opening the update screen</string>
+    <string name="auto_update_check_subtitle">Check for updates as soon as the update screen is opened</string>
     <string name="update_notifications">Update Notifications</string>
-    <string name="update_notifications_subtitle">Show a notification when a new update is found</string>
+    <string name="update_notifications_subtitle">Check GitHub once a day when the app opens, and show a notification when a newer version is found. Nothing is downloaded until you tap Update.</string>
     <string name="settings_check_updates_title">Check for updates</string>
     <string name="later">Later</string>
 

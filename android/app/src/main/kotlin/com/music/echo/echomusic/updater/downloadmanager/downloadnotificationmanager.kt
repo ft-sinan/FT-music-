@@ -169,25 +169,16 @@ object DownloadNotificationManager {
 
   @RequiresApi(Build.VERSION_CODES.BAKLAVA)
   private fun showDownloadCompleteModern(version: String, filePath: String) {
-    val installIntent =
-      Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(
-          androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.FileProvider",
-            java.io.File(filePath)
-          ),
-          "application/vnd.android.package-archive"
-        )
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-
+    // Opens the update screen, not Android's installer. The screen verifies the file against the
+    // release's published SHA-256 and FT Music's signing certificate first, so a notification can
+    // never be a shortcut past those checks.
     val pendingIntent =
       PendingIntent.getActivity(
         appContext,
-        0,
-        installIntent,
+        NOTIFICATION_ID,
+        Intent(appContext, echo.music.iad1tya.MainActivity::class.java)
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+          .putExtra(echo.music.iad1tya.MainActivity.EXTRA_OPEN_UPDATE_SCREEN, true),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
@@ -213,7 +204,7 @@ object DownloadNotificationManager {
       Notification.Builder(appContext, CHANNEL_ID)
         .setSmallIcon(R.drawable.updated)
         .setContentTitle(appContext.getString(R.string.update_ready))
-        .setContentText(appContext.getString(R.string.tap_to_install_version, version))
+        .setContentText(appContext.getString(R.string.tap_to_review_version, version))
         .setAutoCancel(true)
         .setContentIntent(pendingIntent)
         .setStyle(progressStyle)
@@ -285,25 +276,16 @@ object DownloadNotificationManager {
   }
 
   private fun showDownloadCompleteLegacy(version: String, filePath: String) {
-    val installIntent =
-      Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(
-          androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.FileProvider",
-            java.io.File(filePath)
-          ),
-          "application/vnd.android.package-archive"
-        )
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-
+    // Opens the update screen, not Android's installer. The screen verifies the file against the
+    // release's published SHA-256 and FT Music's signing certificate first, so a notification can
+    // never be a shortcut past those checks.
     val pendingIntent =
       PendingIntent.getActivity(
         appContext,
-        0,
-        installIntent,
+        NOTIFICATION_ID,
+        Intent(appContext, echo.music.iad1tya.MainActivity::class.java)
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+          .putExtra(echo.music.iad1tya.MainActivity.EXTRA_OPEN_UPDATE_SCREEN, true),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
@@ -311,7 +293,7 @@ object DownloadNotificationManager {
       NotificationCompat.Builder(appContext, CHANNEL_ID)
         .setSmallIcon(R.drawable.updated)
         .setContentTitle(appContext.getString(R.string.update_ready))
-        .setContentText(appContext.getString(R.string.tap_to_install_version, version))
+        .setContentText(appContext.getString(R.string.tap_to_review_version, version))
         .setProgress(0, 0, false)
         .setAutoCancel(true)
         .setContentIntent(pendingIntent)
