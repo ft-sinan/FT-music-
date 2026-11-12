@@ -370,18 +370,21 @@ class UpdateReleaseSourceTest {
   fun thePinnedCertificateIsRecognisedWhateverPositionItIsReportedIn() {
     // Signature ordering is documented as not guaranteed, and a rotated certificate reports its
     // history, so the pinned digest is searched for rather than assumed to be first.
-    val pinned = sha256Hex(byteArrayOf(1, 2, 3))
+    val pinned = PINNED_SIGNING_CERT_SHA256
     val other = sha256Hex(byteArrayOf(9, 9, 9))
+    assertNotEquals(pinned, other)
 
     assertEquals(pinned, pinnedDigestAmong(listOf(pinned)))
     assertEquals(pinned, pinnedDigestAmong(listOf(other, pinned)))
     assertEquals(pinned, pinnedDigestAmong(listOf(pinned, other)))
     // Case is not significant: the signing script lowercases, a device might not.
     assertEquals(pinned, pinnedDigestAmong(listOf(pinned.uppercase())))
-    // A different signer is a different signer, not a near miss.
+    // A different signer is a different signer, not a near miss. One hex digit either way is a
+    // different certificate, and a prefix of the right one is not the right one.
     assertNull(pinnedDigestAmong(listOf(other)))
+    assertNull(pinnedDigestAmong(listOf(pinned.dropLast(1))))
+    assertNull(pinnedDigestAmong(listOf("0$pinned")))
     assertNull(pinnedDigestAmong(emptyList()))
-    assertNotEquals(PINNED_SIGNING_CERT_SHA256, other)
   }
 
   @Test
