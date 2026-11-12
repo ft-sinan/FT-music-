@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -363,6 +364,24 @@ class UpdateReleaseSourceTest {
     val published = file!!.readText().trim().lowercase()
     assertEquals(64, published.length)
     assertEquals(published, PINNED_SIGNING_CERT_SHA256)
+  }
+
+  @Test
+  fun thePinnedCertificateIsRecognisedWhateverPositionItIsReportedIn() {
+    // Signature ordering is documented as not guaranteed, and a rotated certificate reports its
+    // history, so the pinned digest is searched for rather than assumed to be first.
+    val pinned = sha256Hex(byteArrayOf(1, 2, 3))
+    val other = sha256Hex(byteArrayOf(9, 9, 9))
+
+    assertEquals(pinned, pinnedDigestAmong(listOf(pinned)))
+    assertEquals(pinned, pinnedDigestAmong(listOf(other, pinned)))
+    assertEquals(pinned, pinnedDigestAmong(listOf(pinned, other)))
+    // Case is not significant: the signing script lowercases, a device might not.
+    assertEquals(pinned, pinnedDigestAmong(listOf(pinned.uppercase())))
+    // A different signer is a different signer, not a near miss.
+    assertNull(pinnedDigestAmong(listOf(other)))
+    assertNull(pinnedDigestAmong(emptyList()))
+    assertNotEquals(PINNED_SIGNING_CERT_SHA256, other)
   }
 
   @Test

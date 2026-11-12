@@ -1,6 +1,8 @@
 package echo.music.iad1tya.echomusic.updater
 
 import android.content.Context
+import android.content.pm.PackageInfo
+import android.content.pm.PackageInfoFlags
 import android.content.pm.PackageManager
 import android.os.Build
 import java.io.File
@@ -25,6 +27,20 @@ import java.security.MessageDigest
  */
 const val PINNED_SIGNING_CERT_SHA256 =
   "d4c1f03eae6424f2806e4aa20b54c5eee25397c2b52f93d9b8edc40b9e1a757f"
+
+/**
+ * Both signature flag families, so a certificate is collected on every supported API level. The
+ * modern flag is spelled out as its value because it only exists from API 28 while this app
+ * supports 26; passing an unrecognised bit to an older framework is harmless, and the deprecated
+ * flag alongside it is what makes Android 9 and 10 collect anything at all.
+ */
+private const val GET_SIGNING_CERTIFICATES_VALUE = 0x08000000
+
+/** [PackageManager.GET_SIGNATURES], spelled as its value because it is deprecated since API 28. */
+private const val GET_SIGNATURES_VALUE = 0x00000040
+
+private const val ARCHIVE_SIGNING_FLAGS: Int =
+  GET_SIGNING_CERTIFICATES_VALUE or GET_SIGNATURES_VALUE
 
 /** The release asset FT Music publishes checksums in. */
 const val CHECKSUM_ASSET_NAME = "SHA256SUMS.txt"
@@ -124,36 +140,84 @@ enum class SignatureMatch {
 }
 
 /**
- * The SHA-256 of the certificate the APK is signed with, computed the same way the
- * `openssl x509 -inform DER -fingerprint -sha256` check in the signing script does. Null when this
- * device will not report it.
+ * Every certificate digest an APK file reports, or null when this device reports none.
+ *
+ * Both flag families are requested on every API level, because `getPackageArchiveInfo` collects an
+ * archive's certificates only when the deprecated `GET_SIGNATURES` is set on Android 9 and 10 - and
+ * again on some Android 13 builds - while `GET_SIGNING_CERTIFICATES` alone leaves `signingInfo` null
+ * there. Passing only the modern flag would make every genuine FT Music update look forged on
+ * exactly the older phones most likely to need it. The answer from `signingInfo` is preferred
+ * wherever it is populated, and the digests are computed the same way the
+ * `openssl x509 -inform DER -fingerprint -sha256` check in the signing script does.
+ *
+ * An empty result and null are kept apart on purpose: null means nothing could be read, which is
+ * not the same as reading a certificate that is not FT Music's.
  */
-fun apkSigningCertificateSha256(context: Context, file: File): String? = runCatching {
-  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+fun apkSigningDigests(context: Context, file: File): List<String>? = runCatching {
+  val info = archivePackageInfo(context, file) ?: return@runCatching null
+  // A package for somebody else's app is not this update, whatever it is signed with.
+  if (info.packageName != context.packageName) return@runCatching null
+  archiveSignerDigests(info).takeIf { it.isNotEmpty() }
+}.getOrNull()
+
+/** FT Music's pinned digest when it is among this APK's signers, otherwise null. */
+fun apkSigningCertificateSha256(context: Context, file: File): String? =
+  apkSigningDigests(context, file)?.let { pinnedDigestAmong(it) }
+
+/** Reads the APK with every flag that can produce a certificate on any supported API level. */
+private fun archivePackageInfo(context: Context, file: File): PackageInfo? =
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
     context.packageManager.getPackageArchiveInfo(
-      file.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES
+      file.absolutePath,
+      PackageInfoFlags.of(ARCHIVE_SIGNING_FLAGS.toLong())
     )
   } else {
     @Suppress("DEPRECATION")
-    context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
-  } ?: return@runCatching null
+    context.packageManager.getPackageArchiveInfo(file.absolutePath, ARCHIVE_SIGNING_FLAGS)
+  }
 
-  val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-    // Multiple signers mean the file is not the single-signed package that was published.
-    val signingInfo = info.signingInfo ?: return@runCatching null
-    if (signingInfo.hasMultipleSigners()) return@runCatching null
-    signingInfo.apkContentsSigners
-  } else {
-    @Suppress("DEPRECATION")
-    info.signatures
-  } ?: return@runCatching null
+/**
+ * The pinned digest when it is one of the reported signers, otherwise null.
+ *
+ * Signature ordering is documented as not guaranteed, and a rotated certificate reports its
+ * history, so the pinned digest is looked for among the signers rather than assumed to be the first
+ * one. Anything else is a different signer. Pure, so the decision that gates an install can be
+ * tested without an Android runtime.
+ */
+fun pinnedDigestAmong(digests: List<String>): String? =
+  digests.firstOrNull { PINNED_SIGNING_CERT_SHA256.equals(it, ignoreCase = true) }
 
-  signatures.firstOrNull()?.toByteArray()?.let { sha256Hex(it) }
-}.getOrNull()
+/** Every certificate digest this package reports, through whichever field the device filled in. */
+fun archiveSignerDigests(info: PackageInfo): List<String> {
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+    val signingInfo = info.signingInfo
+    if (signingInfo != null) {
+      val signers =
+        if (signingInfo.hasMultipleSigners()) {
+          signingInfo.apkContentsSigners
+        } else {
+          // A single signer reports its history, which includes a rotated-out certificate.
+          runCatching { signingInfo.signingCertificateHistory }.getOrNull()
+            ?: signingInfo.apkContentsSigners
+        }
+      signers?.mapNotNull { it?.toByteArray()?.let(::sha256Hex) }?.takeIf { it.isNotEmpty() }
+        ?.let { return it }
+    }
+  }
+  @Suppress("DEPRECATION")
+  val legacy = info.signatures
+  return legacy?.mapNotNull { it?.toByteArray()?.let(::sha256Hex) }.orEmpty()
+}
 
+/**
+ * The verdict that gates an install. Reading a certificate that is not FT Music's and reading none
+ * at all are deliberately different answers: the first is a package that must never be installed,
+ * the second is a device that cannot say, where the published checksum is the only proof available
+ * and the user is told so.
+ */
 fun checkApkSignature(context: Context, file: File): SignatureMatch {
-  val actual = apkSigningCertificateSha256(context, file) ?: return SignatureMatch.UNREADABLE
-  return if (PINNED_SIGNING_CERT_SHA256.equals(actual, ignoreCase = true)) {
+  val digests = apkSigningDigests(context, file) ?: return SignatureMatch.UNREADABLE
+  return if (pinnedDigestAmong(digests) != null) {
     SignatureMatch.FT_MUSIC
   } else {
     SignatureMatch.DIFFERENT

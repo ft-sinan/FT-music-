@@ -150,6 +150,14 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("PINNED_SIGNING_CERT_SHA256", verify)
         for state in ("FT_MUSIC", "DIFFERENT", "UNREADABLE"):
             self.assertIn(state, verify)
+        # Android 9 and 10 collect an archive's certificates only when the deprecated
+        # GET_SIGNATURES flag is set, so asking with the modern flag alone would report every
+        # genuine update as unverifiable on exactly the older phones most likely to need it.
+        # 0x08000000 is GET_SIGNING_CERTIFICATES, 0x00000040 is GET_SIGNATURES.
+        self.assertIn("0x08000000", verify)
+        self.assertIn("0x00000040", verify)
+        self.assertIn("GET_SIGNING_CERTIFICATES_VALUE or GET_SIGNATURES_VALUE", verify)
+        self.assertIn("pinnedDigestAmong(digests) != null", verify)
         self.assertIn("if (!downloadVerified && !signatureUnreadable)", screen)
         self.assertIn("SignatureMatch.DIFFERENT ->", screen)
         self.assertIn("if (expectedSha256 != null)", worker)

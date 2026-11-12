@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -27,22 +28,19 @@ class UpdateVerificationInstrumentedTest {
 
   private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-  private fun installedCertificateSha256(): String? {
-    val packageName = context.packageName
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      val info = context.packageManager.getPackageInfo(
-        packageName, PackageManager.GET_SIGNING_CERTIFICATES
-      )
-      val signingInfo = info.signingInfo ?: return null
-      if (signingInfo.hasMultipleSigners()) return null
-      signingInfo.apkContentsSigners?.firstOrNull()?.toByteArray()?.let { sha256Hex(it) }
+  /** The same flags the updater uses, so this compares two answers to the same question. */
+  private val bothSigningFlags =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
     } else {
-      @Suppress("DEPRECATION")
-      val info = context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-      @Suppress("DEPRECATION")
-      info.signatures?.firstOrNull()?.toByteArray()?.let { sha256Hex(it) }
+      PackageManager.GET_SIGNATURES
     }
-  }
+
+  /** What Android reports for the installed app, through the same path the updater reads. */
+  private fun installedSigningDigests(): List<String> =
+    archiveSignerDigests(
+      context.packageManager.getPackageInfo(context.packageName, bothSigningFlags)
+    )
 
   @Test
   fun theCertificateReadFromTheApkFileMatchesTheOneAndroidReportsForTheInstalledApp() {
@@ -50,25 +48,50 @@ class UpdateVerificationInstrumentedTest {
     val apk = File(apkPath)
     assertTrue("expected an APK at $apkPath", apk.exists())
 
-    val fromFile = apkSigningCertificateSha256(context, apk)
-    assertNotNull("this device would not report the APK's certificate", fromFile)
-    assertEquals(64, fromFile!!.length)
-    assertTrue(fromFile.matches(Regex("^[0-9a-f]{64}$")))
-    assertEquals(installedCertificateSha256(), fromFile)
+    val installed = installedSigningDigests()
+    assertTrue("Android would not report the installed app's own certificate", installed.isNotEmpty())
+
+    val fromFile = apkSigningDigests(context, apk)
+    assertNotNull(
+      "this device would not report the certificate of the very APK it is running, so an update " +
+        "here could only be verified by its checksum (API ${Build.VERSION.SDK_INT})",
+      fromFile
+    )
+    // The digest is computed the same way the signing script computes it, so reading the file and
+    // asking Android about the installed app have to agree. Compared as sets because signature
+    // ordering is documented as not guaranteed.
+    assertEquals(installed.toSet(), fromFile!!.toSet())
+    fromFile.forEach {
+      assertEquals(64, it.length)
+      assertTrue(it.matches(Regex("^[0-9a-f]{64}$")))
+    }
   }
 
   @Test
-  fun aPackageSignedBySomebodyElseIsNeverReportedAsFtMusic() {
-    // This build is not signed with the release key, so it must not be mistaken for one. The
-    // assertion is about the verdict, not about which certificate a debug build happens to carry.
+  fun aPackageForADifferentApplicationIsNeverTreatedAsThisUpdate() {
+    // The check compares the archive's package name with this app's, so a signed APK belonging to
+    // somebody else cannot be passed off as an FT Music update even if the digest matched.
+    val apkPath = context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir
+    val info = context.packageManager.getPackageArchiveInfo(apkPath, bothSigningFlags)
+    assertNotNull(info)
+    assertEquals(context.packageName, info!!.packageName)
+  }
+
+  @Test
+  fun aPackageSignedWithADifferentKeyIsReportedAsDifferentNotAsUnreadable() {
+    // CI installs a debug build, which is signed with the debug key. Being told "different" is the
+    // point: had this been reported as "unreadable", the app would fall back to the checksum alone
+    // and offer to install a package signed by somebody else.
     val apk = File(context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir)
-    val verdict = checkApkSignature(context, apk)
-    if (verdict == SignatureMatch.FT_MUSIC) {
-      assertEquals(PINNED_SIGNING_CERT_SHA256, apkSigningCertificateSha256(context, apk))
-    } else {
-      assertTrue(verdict == SignatureMatch.DIFFERENT || verdict == SignatureMatch.UNREADABLE)
-      assertNotEquals(PINNED_SIGNING_CERT_SHA256, apkSigningCertificateSha256(context, apk))
-    }
+    val digests = apkSigningDigests(context, apk)
+    assertNotNull("this device would not report the APK's signers at all", digests)
+    assertTrue(digests!!.isNotEmpty())
+    assertFalse(
+      "a debug build must not carry the release certificate",
+      digests.contains(PINNED_SIGNING_CERT_SHA256)
+    )
+    assertEquals(SignatureMatch.DIFFERENT, checkApkSignature(context, apk))
+    assertNull(apkSigningCertificateSha256(context, apk))
   }
 
   @Test
