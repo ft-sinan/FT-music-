@@ -61,6 +61,24 @@ jobs:
               text = text[:7000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               text = ((compiler_errors.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A') + '%0A') if compiler_errors else '') + text
               print('::error title=Android build failure::' + text)
+
+              # Gradle reports only "There were failing tests"; name them from the JUnit XML.
+              import xml.etree.ElementTree as ET
+              failures = []
+              for report in sorted(Path('android/app/build/test-results').rglob('TEST-*.xml')):
+                  try:
+                      root = ET.parse(report).getroot()
+                  except Exception:
+                      continue
+                  for case in root.iter('testcase'):
+                      for problem in list(case):
+                          if problem.tag in ('failure', 'error'):
+                              detail = ' '.join((problem.get('message') or problem.text or '').split())[:400]
+                              failures.append(f"{case.get('classname')}.{case.get('name')} [{problem.tag}] {detail}")
+              if failures:
+                  named = '\n'.join(failures[:25])
+                  named = named.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::error title=Failing unit tests::' + named)
           PY
       - name: Inspect unsigned APK
         run: |
