@@ -352,17 +352,24 @@ constructor(
 
   /** Keeps MediaStore and any library that reads it consistent with the tags just written. */
   private fun refreshSystemRows(target: Target, edit: AudioTagEdit) {
-    val values = ContentValues().apply {
-      put(MediaStore.Audio.Media.TITLE, edit.title)
-      put(MediaStore.Audio.Media.ARTIST, edit.artists)
-      edit.album?.let { put(MediaStore.Audio.Media.ALBUM, it) }
-      edit.year?.let { put(MediaStore.Audio.Media.YEAR, it) }
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+      // Before scoped storage these columns are writable. From Android 10 on MediaStore derives
+      // them from the file's own tags and ignores a direct write, so the re-scan below is what
+      // actually brings the row in line with what was written.
+      val values = ContentValues().apply {
+        put(MediaStore.Audio.Media.TITLE, edit.title)
+        put(MediaStore.Audio.Media.ARTIST, edit.artists)
+        edit.album?.let { put(MediaStore.Audio.Media.ALBUM, it) }
+        edit.year?.let { put(MediaStore.Audio.Media.YEAR, it) }
+      }
+      runCatching {
+        @Suppress("DEPRECATION")
+        context.contentResolver.update(target.uri, values, null, null)
+      }.onFailure {
+        Timber.w(it, "Could not update the MediaStore row for ${target.displayName}")
+      }
     }
-    runCatching {
-      @Suppress("DEPRECATION")
-      context.contentResolver.update(target.uri, values, null, null)
-    }
-      .onFailure { Timber.w(it, "Could not update the MediaStore row for ${target.displayName}") }
+    // Every release needs the row re-read from the file that was just written.
     @Suppress("DEPRECATION")
     val path = runCatching {
       context.contentResolver.query(
