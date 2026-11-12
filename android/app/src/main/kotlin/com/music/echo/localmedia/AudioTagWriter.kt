@@ -385,8 +385,11 @@ constructor(
       Timber.w("No FT Music row for $songId; the file's own tags hold this edit")
       return
     }
+    // withTransaction, not transaction: the latter only posts the work to an executor, so Apply
+    // could report success before the library was updated and a failure would surface on Room's
+    // own thread instead of here.
     runCatching {
-      database.transaction {
+      database.withTransaction {
         deleteSongArtistMaps(songId)
         upsert(
           existing.copy(

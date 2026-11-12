@@ -355,7 +355,7 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("if (source.isTheUsersFile && original.canWrite())", writer)
         # MediaStore and FT Music's own library are refreshed from the file that was written.
         self.assertIn("MediaScannerConnection.scanFile", writer)
-        self.assertIn("database.transaction", writer)
+        self.assertIn("database.withTransaction", writer)
         self.assertIn("deleteSongArtistMaps(songId)", writer)
         # A container that cannot hold a cover drops it rather than pretending to write one.
         self.assertIn("if (container.supportsCover) coverBytes else null", editor)

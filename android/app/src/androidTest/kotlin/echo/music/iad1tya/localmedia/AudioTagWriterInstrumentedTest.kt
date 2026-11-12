@@ -319,10 +319,33 @@ class AudioTagWriterInstrumentedTest {
     assertNull("no picture may be claimed for a container that cannot hold one", embeddedPicture(fixture.uri))
   }
 
-  // A container FT Music cannot retag is covered by AudioTagEditTest (TagContainer.from returns
-  // null for it) and by the writer's early refusal. Publishing one here meant putting bytes on
-  // device under a name MediaProvider cannot parse, which killed the instrumentation process on
-  // every API level and took the rest of the suite with it.
+  @Test
+  fun anUnsupportedContainerIsRefusedAndTheFileIsLeftExactlyAsItWas() = runBlocking {
+    // WAV bytes under a name and mime FT Music cannot retag. MediaProvider cannot parse it either,
+    // so there is no duration to wait for.
+    val fixture = publish(
+      name = "ft-tag-unsupported-${UUID.randomUUID()}.ape",
+      mimeType = "audio/x-ape",
+      bytes = wav,
+      expectDuration = false,
+    )
+    val before = readAll(fixture.uri)
+
+    val target = writer.inspect(fixture.songId)
+    assertNotNull("the published fixture must be inspectable", target)
+    assertNull("an APE file must not be reported as retaggable", target!!.container)
+
+    val result = writer.write(
+      fixture.songId,
+      AudioTagEdit(title = "Should Not Apply", artists = "Nobody", album = null, year = null),
+    )
+
+    val failed = result.result as? AudioTagEditResult.Failed
+    assertNotNull("an unsupported container must be refused, not written", failed)
+    assertEquals(AudioTagEditFailure.UNSUPPORTED_FORMAT, failed!!.reason)
+    assertArrayEquals("a refused edit must not touch the file", before, readAll(fixture.uri))
+    assertEquals(fixture.name.substringBeforeLast('.'), mediaStoreTitle(fixture.uri))
+  }
 
   @Test
   fun aSongWhoseFileIsGoneIsReportedRatherThanWritten() = runBlocking {
