@@ -2,7 +2,6 @@ package echo.music.iad1tya.echomusic.updater
 
 import android.content.Context
 import android.content.pm.PackageInfo
-import android.content.pm.PackageInfoFlags
 import android.content.pm.PackageManager
 import android.os.Build
 import java.io.File
@@ -164,17 +163,17 @@ fun apkSigningDigests(context: Context, file: File): List<String>? = runCatching
 fun apkSigningCertificateSha256(context: Context, file: File): String? =
   apkSigningDigests(context, file)?.let { pinnedDigestAmong(it) }
 
-/** Reads the APK with every flag that can produce a certificate on any supported API level. */
-private fun archivePackageInfo(context: Context, file: File): PackageInfo? =
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    context.packageManager.getPackageArchiveInfo(
-      file.absolutePath,
-      PackageInfoFlags.of(ARCHIVE_SIGNING_FLAGS.toLong())
-    )
-  } else {
-    @Suppress("DEPRECATION")
-    context.packageManager.getPackageArchiveInfo(file.absolutePath, ARCHIVE_SIGNING_FLAGS)
-  }
+/**
+ * Reads the APK with every flag that can produce a certificate on any supported API level.
+ *
+ * The `PackageInfoFlags` overload added in API 33 is deliberately not used: it resolves against a
+ * compile SDK that does not expose it here, and the flag overload below still works on every level
+ * including current ones. It is deprecated, not removed.
+ */
+private fun archivePackageInfo(context: Context, file: File): PackageInfo? {
+  @Suppress("DEPRECATION")
+  return context.packageManager.getPackageArchiveInfo(file.absolutePath, ARCHIVE_SIGNING_FLAGS)
+}
 
 /**
  * The pinned digest when it is one of the reported signers, otherwise null.

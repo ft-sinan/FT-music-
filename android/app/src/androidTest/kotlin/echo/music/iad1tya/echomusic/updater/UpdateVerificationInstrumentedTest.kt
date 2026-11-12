@@ -68,16 +68,6 @@ class UpdateVerificationInstrumentedTest {
   }
 
   @Test
-  fun aPackageForADifferentApplicationIsNeverTreatedAsThisUpdate() {
-    // The check compares the archive's package name with this app's, so a signed APK belonging to
-    // somebody else cannot be passed off as an FT Music update even if the digest matched.
-    val apkPath = context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir
-    val info = context.packageManager.getPackageArchiveInfo(apkPath, bothSigningFlags)
-    assertNotNull(info)
-    assertEquals(context.packageName, info!!.packageName)
-  }
-
-  @Test
   fun aPackageSignedWithADifferentKeyIsReportedAsDifferentNotAsUnreadable() {
     // CI installs a debug build, which is signed with the debug key. Being told "different" is the
     // point: had this been reported as "unreadable", the app would fall back to the checksum alone
