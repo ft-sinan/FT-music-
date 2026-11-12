@@ -103,10 +103,35 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import os
+          import os, re
           root = Path(os.environ['RUNNER_TEMP'])
-          text = '\n'.join((root / name).read_text(errors='replace')[-5000:]
-                           for name in ('instrumentation.log', 'local-delete-smoke.log', 'ui-smoke.log') if (root / name).exists())
+          names = ('instrumentation.log', 'local-delete-smoke.log', 'ui-smoke.log')
+          # A raw tail is useless here: the instrumentation log is verbose status blocks and the
+          # interesting lines sit in the middle, so an annotation limit truncates them away. Report
+          # the verdict, the failing test names and their stack traces instead.
+          interesting = re.compile(
+              r'FAILURES!!|^Failures:|^Tests run:|^OK \(|INSTRUMENTATION_FAILED'
+              r'|INSTRUMENTATION_RESULT|INSTRUMENTATION_ABORTED'
+              r'|^INSTRUMENTATION_STATUS: stack='
+              r'|^INSTRUMENTATION_STATUS_CODE: -'
+              r'|^[A-Za-z0-9_.]*(Exception|Error|Failure)\b|^\tat |shortMsg|longMsg'
+              r'|Traceback|AssertionError|No such|not found|Trace|did not|expected')
+          parts = []
+          for name in names:
+              path = root / name
+              if not path.exists():
+                  parts.append('== %s: MISSING ==' % name)
+                  continue
+              lines = path.read_text(errors='replace').splitlines()
+              hits = [i for i, line in enumerate(lines) if interesting.search(line)]
+              # Keep the lines around each hit so a failure carries its test and class name, which
+              # sit a few lines above the stack trace in instrumentation output.
+              window = sorted({j for i in hits for j in range(max(0, i - 6), min(len(lines), i + 3))})
+              kept = [lines[i] for i in window[:400]]
+              parts.append('== %s: %d lines, %d hits, their context, then the last 20 ==' % (name, len(lines), len(hits)))
+              parts.extend(kept)
+              parts.extend(lines[-20:])
+          text = '\n'.join(parts)[-6000:]
           if text:
               print('::error title=Emulator feature check failed::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           PY
