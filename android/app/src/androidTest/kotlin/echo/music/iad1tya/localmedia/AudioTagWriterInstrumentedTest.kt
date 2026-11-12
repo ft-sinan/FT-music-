@@ -76,7 +76,18 @@ class AudioTagWriterInstrumentedTest {
     database.close()
   }
 
-  private fun publish(name: String, mimeType: String, bytes: ByteArray): Fixture = runBlocking {
+  /**
+   * Publishes [bytes] as a device audio file and returns its FT Music id.
+   *
+   * [expectDuration] is false for a container MediaProvider cannot parse: waiting for a duration
+   * that will never be extracted only blocks the instrumentation thread.
+   */
+  private suspend fun publish(
+    name: String,
+    mimeType: String,
+    bytes: ByteArray,
+    expectDuration: Boolean = true,
+  ): Fixture {
     val values = ContentValues().apply {
       put(MediaStore.Audio.Media.DISPLAY_NAME, name)
       put(MediaStore.Audio.Media.TITLE, name.substringBeforeLast('.'))
@@ -122,15 +133,17 @@ class AudioTagWriterInstrumentedTest {
       }, null, null)
     }
     // Extraction is asynchronous on scoped-storage releases; wait for a usable duration.
-    for (attempt in 0 until 40) {
-      if (mediaStoreDuration(uri) > 0) break
-      Thread.sleep(250)
+    if (expectDuration) {
+      for (attempt in 0 until 40) {
+        if (mediaStoreDuration(uri) > 0) break
+        kotlinx.coroutines.delay(250)
+      }
     }
     val songId = uri.toString()
     withContext(Dispatchers.IO) {
       database.upsert(SongEntity(id = songId, title = name.substringBeforeLast('.'), isLocal = true))
     }
-    Fixture(songId, uri, name)
+    return Fixture(songId, uri, name)
   }
 
   private fun legacyPath(uri: Uri): String? = runCatching {
@@ -308,7 +321,12 @@ class AudioTagWriterInstrumentedTest {
 
   @Test
   fun anUnsupportedContainerIsRefusedAndTheFileIsLeftExactlyAsItWas() = runBlocking {
-    val fixture = publish("ft-tag-unsupported-${UUID.randomUUID()}.ape", "audio/x-ape", wav)
+    val fixture = publish(
+      name = "ft-tag-unsupported-${UUID.randomUUID()}.ape",
+      mimeType = "audio/x-ape",
+      bytes = wav,
+      expectDuration = false,
+    )
     val before = readAll(fixture.uri)
 
     val target = writer.inspect(fixture.songId)

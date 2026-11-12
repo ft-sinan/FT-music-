@@ -30,7 +30,8 @@ class AudioTagEditTest {
     assertTrue(command, command.contains("-id3v2_version 3"))
     assertTrue(command, command.contains("-metadata title='Midnight City'"))
     assertTrue(command, command.contains("-metadata artist='M83, Anthony Gonzalez'"))
-    assertTrue(command, command.contains("-metadata album='Hurry Up, We\'re Dreaming'"))
+    // An apostrophe in the album is escaped for the shell rather than silently dropped.
+    assertTrue(command, command.contains("""-metadata album='Hurry Up, We'\''re Dreaming'"""))
     // MP3 readers look at both fields, so both are written.
     assertTrue(command, command.contains("-metadata date='2011'"))
     assertTrue(command, command.contains("-metadata year='2011'"))
