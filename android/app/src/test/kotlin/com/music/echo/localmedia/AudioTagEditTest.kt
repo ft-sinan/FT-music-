@@ -241,10 +241,17 @@ class AudioTagEditTest {
     val editor = editor()
     editor.setYear("not a year")
     assertNull(editor.year)
-    editor.setYear("1899")
+    editor.setYear("999")
     assertNull(editor.year)
+    editor.setYear("3000")
+    assertNull(editor.year)
+    editor.setYear("-5")
+    assertNull(editor.year)
+    // A trailing space and an unusual but real year are both kept.
     editor.setYear("2024 ")
     assertEquals(2024, editor.year)
+    editor.setYear("1899")
+    assertEquals(1899, editor.year)
   }
 
   /** A byte array needs a content comparison, and JUnit's own overload rejects a nullable one. */

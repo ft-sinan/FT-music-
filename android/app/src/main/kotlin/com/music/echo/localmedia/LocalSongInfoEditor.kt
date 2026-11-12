@@ -104,8 +104,13 @@ class LocalSongInfoEditor(
     album = value
   }
 
+  /**
+   * Accepts any year a recording could plausibly carry and rejects values that cannot be one, so a
+   * mistyped "2" or "99999" is dropped rather than written into the file. Clearing the field leaves
+   * the year the file already has alone - [AudioTagEdit] only omits a null year.
+   */
   fun setYear(value: String) {
-    year = value.trim().toIntOrNull()?.takeIf { it in 1000..2999 }
+    year = value.trim().toIntOrNull()?.takeIf { it in PLAUSIBLE_YEARS }
   }
 
   /** A cover the user picked from the device. */
@@ -228,6 +233,8 @@ class LocalSongInfoEditor(
   }
 
   companion object {
+    /** Deliberately generous: the point is to reject non-years, not to police history. */
+    val PLAUSIBLE_YEARS = 1000..2999
     const val COVER_UNSUPPORTED = "cover_unsupported"
     const val AUDIO_UNTOUCHED = "audio_untouched"
     private const val SEARCH_TIMEOUT_MS = 20_000L
