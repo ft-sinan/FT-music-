@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Environment
 import java.io.File
 
+/** Pulls `v0.7.0` out of `FT-Music-v0.7.0-arm64-v8a.apk`. */
+private val APK_VERSION_IN_NAME = Regex("-((v?\\d+(?:\\.\\d+)*))-")
+
 fun getDownloadedApksDir(context: Context): File {
   return File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "echo_updates")
 }
@@ -42,3 +45,25 @@ fun autoClearOldApks(context: Context) {
     }
     ?.forEach { it.delete() }
 }
+
+/**
+ * Drops update packages that are no longer any use: anything older than a day, and anything for a
+ * release other than the one now installed. A ~200 MB universal APK should not sit in app storage
+ * after the user updated, and the package for the installed version is kept so the update screen
+ * can still offer it if the install did not actually go through.
+ */
+fun clearStaleUpdateApks(context: Context, installedVersion: String) {
+  autoClearOldApks(context)
+  val dir = getDownloadedApksDir(context)
+  if (!dir.exists() || !dir.isDirectory) return
+  val installed = installedVersion.removePrefix("v").removePrefix("b").trim()
+  if (installed.isEmpty()) return
+  dir
+    .listFiles { file -> file.isFile && file.name.endsWith(".apk", ignoreCase = true) }
+    ?.forEach { file ->
+      val tag = APK_VERSION_IN_NAME.find(file.name)?.groupValues?.getOrNull(1)
+      val version = tag?.removePrefix("v")?.removePrefix("b")?.trim()
+      if (version != null && version != installed) file.delete()
+    }
+}
+

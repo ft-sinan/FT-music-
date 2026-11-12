@@ -27,6 +27,9 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
  * @param changelog Pre-parsed structured changelog sections, if available.
  * @param description Raw release description or fallback Markdown text.
  * @param onDismiss Invoked when the user dismisses the dialog.
+ * @param onUpdate Invoked when the user asks for the update; opens the in-app update screen, which
+ *   downloads the right package, verifies it, and lets Android ask for confirmation. Defaults to
+ *   opening the FT Music releases page so existing callers keep working.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +37,8 @@ fun UpdateAvailableDialog(
   version: String,
   changelog: List<ChangelogSection>,
   description: String?,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onUpdate: (() -> Unit)? = null
 ) {
   val context = LocalContext.current
   val cardShape =
@@ -195,10 +199,18 @@ fun UpdateAvailableDialog(
           Spacer(modifier = Modifier.width(8.dp))
           Button(
             onClick = {
-              onDismiss()
-              val intent =
-                Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/ft-sinan/FT-music-/releases"))
-              context.startActivity(intent)
+              val handler = onUpdate
+              if (handler != null) {
+                handler()
+              } else {
+                onDismiss()
+                val intent =
+                  Intent(
+                    Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://github.com/ft-sinan/FT-music-/releases")
+                  )
+                context.startActivity(intent)
+              }
             },
             shape = actionShape,
           ) {

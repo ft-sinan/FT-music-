@@ -73,7 +73,11 @@ cd android
 
 The universal GMS variant retains Echo's optional Google Cast support; `assembleUniversalFossDebug` is the upstream FOSS variant. A debug APK has a different package suffix and signing key and is **not** an in-place update. `assembleUniversalGmsRelease` generates an unsigned release; [`android/RELEASING.md`](android/RELEASING.md) describes the protected signing key and release process. Emulator checks covered launch, the Google sign-in page, local playback and system media controls, plus a signed in-place upgrade from v0.4 with a synthetic legacy library. The new fork has not yet been verified on a physical phone.
 
-The app's **Settings → Updates** opens [FT Music releases](https://github.com/ft-sinan/FT-music-/releases) manually, not Echo's APK site. Published in-place updates must use the same application ID (`com.ftmusic.app`), signing certificate and a higher version code. The selected fresh-library behavior still applies. Android asks the user to confirm installation.
+The app's **Settings → App updates** can check for a newer release, show its version and notes, download the APK built for that device and hand it to Android's installer — or open [FT Music releases](https://github.com/ft-sinan/FT-music-/releases) in a browser instead. Either way the source is FT Music's own GitHub releases, never Echo's APK site.
+
+Two checks gate an in-app install, and both fail closed. The downloaded file must match the SHA-256 that the release publishes in `SHA256SUMS.txt`, and its signing certificate must be the one pinned in `android/signing-cert-sha256.txt` — the same value `android/scripts/sign-release.sh` verifies before publishing. A file that fails either is discarded and the reason is shown; it never reaches the installer. This matters because Android's own refusal for a changed signature asks the user to uninstall first, which would destroy the library, likes, playlists and downloads. Update notifications are on by default and check at most once a day when the app opens; finding an update never downloads or installs anything. The automatic check on opening the update screen is off by default, and pre-releases stay opt-in under **Beta updates**.
+
+Published in-place updates must use the same application ID (`com.ftmusic.app`), signing certificate and a higher version code. The selected fresh-library behavior still applies. Android always asks the user to confirm installation, so nothing installs silently.
 
 ## Web companion music and artwork credits
 

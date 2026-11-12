@@ -370,6 +370,9 @@ dependencies {
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
+  // Android supplies org.json at runtime but the JVM stub throws, so release discovery is tested
+  // against the real implementation rather than a stub that cannot be trusted to behave the same.
+  testImplementation("org.json:json:20240303")
   androidTestImplementation("androidx.test:runner:1.6.2")
   androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

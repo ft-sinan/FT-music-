@@ -104,14 +104,78 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('finishedUrl.host == "music.youtube.com"', login)
         self.assertNotIn('url?.startsWith("https://music.youtube.com")', login)
 
-    def test_updates_are_ft_owned_and_manual(self):
+    def test_updates_are_ft_owned_and_verified_before_install(self):
+        """In-app updating may only offer packages it can prove are FT Music's own."""
         update = (MAIN / "kotlin/com/music/echo/ui/screens/settings/UpdateSettings.kt").read_text()
         nav = (MAIN / "kotlin/com/music/echo/ui/screens/NavigationBuilder.kt").read_text()
         activity = (MAIN / "kotlin/com/music/echo/MainActivity.kt").read_text()
-        self.assertIn('https://github.com/ft-sinan/FT-music-/releases', update)
-        self.assertNotIn('echomusic.fun', update)
-        self.assertIn('composable("update") { UpdateSettings(navController, scrollBehavior) }', nav)
-        self.assertNotIn('if (getAutoUpdateCheckSetting(context))', activity)
+        updater_dir = MAIN / "kotlin/com/music/echo/echomusic/updater"
+        screen = (updater_dir / "echomusicupdater.kt").read_text()
+        source = (updater_dir / "UpdateReleaseSource.kt").read_text()
+        verify = (updater_dir / "UpdateVerification.kt").read_text()
+        worker = (updater_dir / "downloadmanager/UpdateDownloadWorker.kt").read_text()
+        notifications = (updater_dir / "downloadmanager/downloadnotificationmanager.kt").read_text()
+
+        # Still FT Music's own releases, and never the upstream update service.
+        self.assertIn("https://github.com/$FT_MUSIC_REPO/releases", source)
+        self.assertIn("FT_MUSIC_RELEASES_URL", update)
+        # MainActivity keeps an unrelated deep-link host check from upstream, so the updater
+        # sources are the ones held to this.
+        for text in (update, screen, source, verify, worker, notifications):
+            self.assertNotIn("echomusic.fun", text)
+
+        # The screen that downloads and installs is reachable, not orphaned.
+        self.assertIn('composable("update") { UpdateScreen(navController) }', nav)
+        self.assertIn('navController.navigate("update")', update)
+
+        # Looking for an update on its own is opt-in, and never downloads anything.
+        self.assertIn("getBoolean(KEY_AUTO_UPDATE_CHECK, false)", screen)
+        self.assertIn("isAutomaticUpdateCheckDue(context)", activity)
+        # Checking in the background is gated on the notification setting, which is also the
+        # setting the user can see and turn off.
+        notify = (updater_dir / "UpdateNotification.kt").read_text()
+        self.assertIn("getBoolean(KEY_UPDATE_NOTIFICATIONS, true)", screen)
+        self.assertIn("if (!getUpdateNotificationsSetting(context)) return false", notify)
+        self.assertIn("if (!echo.music.iad1tya.echomusic.updater.isAutomaticUpdateCheckDue(context))", activity)
+
+        # The package comes from the release's own asset list, chosen for this device, and its
+        # checksum comes from the published SHA256SUMS.txt. No URL is ever assembled by hand.
+        self.assertIn("Build.SUPPORTED_ABIS.toList()", screen)
+        self.assertIn("fun chooseApkAsset(", verify)
+        self.assertIn("-universal.apk", verify)
+        self.assertIn('const val CHECKSUM_ASSET_NAME = "SHA256SUMS.txt"', verify)
+        self.assertNotIn("FT-Music-${currentStatus.version}.apk", screen)
+
+        # Nothing reaches the installer without both proofs.
+        self.assertIn("PINNED_SIGNING_CERT_SHA256", verify)
+        for state in ("FT_MUSIC", "DIFFERENT", "UNREADABLE"):
+            self.assertIn(state, verify)
+        self.assertIn("if (!downloadVerified && !signatureUnreadable)", screen)
+        self.assertIn("SignatureMatch.DIFFERENT ->", screen)
+        self.assertIn("if (expectedSha256 != null)", worker)
+        self.assertIn("finalFile.delete()", worker)
+        self.assertIn("REASON_CHECKSUM_MISMATCH", worker)
+
+        # Android still asks, so nothing installs silently.
+        self.assertIn("canRequestPackageInstalls()", screen)
+        self.assertIn("ContextCompat.startActivity(context, installIntent, null)", screen)
+
+        # A notification is never a shortcut past those checks: it opens the screen that does them.
+        self.assertNotIn("application/vnd.android.package-archive", notifications)
+        self.assertEqual(notifications.count("EXTRA_OPEN_UPDATE_SCREEN"), 2)
+        self.assertIn("handleUpdateScreenIntent(activeIntent, navController)", activity)
+        self.assertIn('navController.navigate("update") { launchSingleTop = true }', activity)
+
+        # A package already on disk is offered again only after being proved a second time, and a
+        # package for a release the user has moved past is deleted rather than left in storage.
+        self.assertIn("fun findVerifiedDownload", screen)
+        self.assertIn("matchesPublishedChecksum(file, apk.sha256)", screen)
+        self.assertIn("checkApkSignature(context, file) == SignatureMatch.DIFFERENT", screen)
+        self.assertIn("clearStaleUpdateApks(context, BuildConfig.VERSION_NAME)", activity)
+
+        # The pinned certificate is the one the release pipeline signs with.
+        pinned = (ROOT / "signing-cert-sha256.txt").read_text().strip()
+        self.assertIn(pinned, verify)
 
     def test_local_file_deletion_requires_confirmation_and_targets_only_local_rows(self):
         menu = (MAIN / "kotlin/com/music/echo/ui/menu/SongMenu.kt").read_text()

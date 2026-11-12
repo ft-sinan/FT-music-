@@ -9,6 +9,9 @@ import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import echo.music.iad1tya.R
+import echo.music.iad1tya.echomusic.updater.matchesPublishedChecksum
+import echo.music.iad1tya.echomusic.updater.safeApkFileName
+import echo.music.iad1tya.echomusic.updater.sha256Hex
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -26,6 +29,14 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
       val apkUrl = inputData.getString("apk_url") ?: return@withContext Result.failure()
       val version = inputData.getString("version") ?: "unknown"
       val fileSize = inputData.getString("file_size") ?: ""
+      // The name the release publishes, so the installer shows a real file name instead of a
+      // generic one. Falls back to the legacy name for callers that do not supply it.
+      val publishedName = safeApkFileName(inputData.getString("apk_name")) ?: "echomusic.apk"
+      // The SHA-256 this release published for that package. When present it is mandatory: a
+      // download that does not match is discarded rather than offered to the installer.
+      val expectedSha256 = inputData.getString("expected_sha256")?.trim()?.takeIf { it.isNotEmpty() }
+      // Echoed into the result so the screen can ignore results left behind by an earlier session.
+      val runToken = inputData.getLong("run_token", -1L)
 
       try {
         val startingNotification =
@@ -72,8 +83,7 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
         }
 
         val isZip = apkUrl.contains("nightly.link") || apkUrl.endsWith(".zip")
-        val downloadFile =
-          if (isZip) File(downloadDir, "echo_temp.zip") else File(downloadDir, "echomusic.apk")
+        val downloadFile = if (isZip) File(downloadDir, "echo_temp.zip") else File(downloadDir, publishedName)
         val outputStream = FileOutputStream(downloadFile)
 
         val buffer = ByteArray(8192)
@@ -126,7 +136,7 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
 
         val finalFile =
           if (isZip) {
-            val targetApkFile = File(downloadDir, "echomusic.apk")
+            val targetApkFile = File(downloadDir, publishedName)
             var extracted = false
             try {
               ZipInputStream(downloadFile.inputStream()).use { zis ->
@@ -171,9 +181,39 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
           }
         }
 
+        if (expectedSha256 != null) {
+          val actualSha256 = sha256Hex(finalFile)
+          if (!matchesPublishedChecksum(finalFile, expectedSha256)) {
+            // A mismatch is not transient, so retrying would only burn data.
+            finalFile.delete()
+            DownloadNotificationManager.showDownloadFailed(
+              version,
+              context.getString(R.string.update_checksum_mismatch)
+            )
+            return@withContext Result.failure(
+              workDataOf("failure_reason" to REASON_CHECKSUM_MISMATCH, "run_token" to runToken)
+            )
+          }
+          DownloadNotificationManager.showDownloadComplete(version, finalFile.absolutePath)
+          return@withContext Result.success(
+            workDataOf(
+              "file_path" to finalFile.absolutePath,
+              "verified" to true,
+              "actual_sha256" to (actualSha256 ?: ""),
+              "run_token" to runToken
+            )
+          )
+        }
+
         DownloadNotificationManager.showDownloadComplete(version, finalFile.absolutePath)
 
-        Result.success(workDataOf("file_path" to finalFile.absolutePath))
+        Result.success(
+          workDataOf(
+            "file_path" to finalFile.absolutePath,
+            "verified" to false,
+            "run_token" to runToken
+          )
+        )
       } catch (e: IOException) {
         DownloadNotificationManager.showDownloadFailed(
           version,
@@ -188,4 +228,8 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
         Result.failure()
       }
     }
+
+  companion object {
+    const val REASON_CHECKSUM_MISMATCH = "checksum_mismatch"
+  }
 }
