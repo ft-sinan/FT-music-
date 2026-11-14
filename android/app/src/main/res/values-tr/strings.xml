@@ -237,6 +237,8 @@
     <string name="action_logout">Oturumu kapat</string>
     <string name="action_login">Giriş Yap</string>
     <string name="login">Oturum aç</string>
+    <string name="logged_in_as">%1$s olarak oturum açıldı</string>
+    <string name="login_unverified">Oturum açıldı, ancak FT Music hesap bilgilerini doğrulayamadı</string>
     <string name="not_logged_in">Oturum açılmadı</string>
     <string name="login_failed">Oturum açma başarısız</string>
     <string name="content_language">Varsayılan içerik dili</string>

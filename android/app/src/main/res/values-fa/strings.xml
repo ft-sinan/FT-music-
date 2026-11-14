@@ -259,6 +259,8 @@
     <string name="action_logout">خروج از حساب</string>
     <string name="action_login">ورود به حساب</string>
     <string name="login">ورود</string>
+    <string name="logged_in_as">وارد شدید: %1$s</string>
+    <string name="login_unverified">وارد شدید، اما FT Music نتوانست اطلاعات حساب را تأیید کند</string>
     <string name="show_audio_quality_badge">نمایش نشان کیفیت صدا</string>
     <string name="not_logged_in">وارد حساب نشده‌اید</string>
     <string name="login_failed">ورود ناموفق بود</string>

@@ -101,7 +101,8 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("login") { LoginScreen(navController) }', nav)
         self.assertIn('https://accounts.google.com/ServiceLogin?', login)
         self.assertIn('YouTube.useLoginForBrowse', settings)
-        self.assertIn('finishedUrl.host == "music.youtube.com"', login)
+        self.assertIn('host == "music.youtube.com"', login)
+        self.assertIn("val host = url?.let(Uri::parse)?.host?.lowercase().orEmpty()", login)
         self.assertNotIn('url?.startsWith("https://music.youtube.com")', login)
 
     def test_updates_are_ft_owned_and_verified_before_install(self):
@@ -506,6 +507,64 @@ class ForkConfigurationTest(unittest.TestCase):
             "ft_edit_info_audio_note", "ft_edit_info_saved", "ft_edit_info_search_hint",
         ):
             self.assertIn(f'<string name="{name}">', strings)
+
+    def test_sign_in_does_not_kill_the_app_or_trust_a_lookalike_host(self):
+        """Google sign-in has to work in an embedded WebView without tearing the app down.
+
+        Three things were wrong and all three came from upstream's own v1.4.6 fix, which FT Music
+        takes with one tightening: a successful sign-in used to relaunch the activity and call
+        Runtime.getRuntime().exit(0), which killed playback and every in-memory queue; Google's
+        two-factor step stalled because the user agent advertised an embedded WebView; and the sign-in
+        cookie was dropped as third-party. Upstream's host allowlist is an unanchored pattern that
+        also accepts google.com.attacker.example, so FT Music matches registrable-domain suffixes
+        instead.
+        """
+        login_file = (MAIN / "kotlin/com/music/echo/ui/screens/LoginScreen.kt").read_text()
+        # Judged on the code: the KDoc names the process-killing call it replaced, and a comment
+        # describing a removed bug must not read as the bug still being there.
+        login = re.sub(r"/[*].*?[*]/", "", login_file, flags=re.S)
+        hosts = (MAIN / "kotlin/com/music/echo/ui/screens/LoginHosts.kt").read_text()
+        strings = (MAIN / "res/values/strings.xml").read_text()
+
+        # Signing in navigates back; it does not kill the process or relaunch the activity.
+        self.assertNotIn("Runtime.getRuntime().exit", login)
+        self.assertNotIn("getLaunchIntentForPackage", login)
+        self.assertIn("if (!navController.navigateUp()) navController.backToMain()", login)
+
+        # Google's two-factor step rejects a user agent that says this is an embedded WebView.
+        self.assertIn('.replace("; wv", "")', login)
+        self.assertIn("VERSION_TOKEN_REGEX", login)
+        self.assertIn('Regex("Version/', login)
+        # The pages themselves need these, and the sign-in cookie is third-party to them.
+        for setting in (
+            "domStorageEnabled = true",
+            "databaseEnabled = true",
+            "setSupportMultipleWindows(true)",
+            "javaScriptCanOpenWindowsAutomatically = true",
+            "cookieManager.setAcceptThirdPartyCookies(this, true)",
+            # A WebView holding Google credentials has no business reading local files.
+            "allowFileAccess = false",
+            "allowContentAccess = false",
+        ):
+            self.assertIn(setting, login)
+        # Google opens recovery and help links in a new window; without this the flow dead-ends.
+        self.assertIn("override fun onCreateWindow(", login)
+
+        # The allowlist is suffix-based, not a pattern that matches a trusted name anywhere.
+        self.assertNotIn("ALLOWED_LOGIN_HOSTS_REGEX", login + hosts)
+        self.assertIn('normalized.endsWith(".$it")', hosts)
+        self.assertIn('"google.com",', hosts)
+        # Pure Kotlin, so the boundary is testable on the JVM without a device.
+        self.assertNotIn("import android", hosts)
+        self.assertNotIn("import androidx", hosts)
+
+        # Both outcomes are reported to the user, and neither is hardcoded English.
+        self.assertIn('name="logged_in_as"', strings)
+        self.assertIn('name="login_unverified"', strings)
+        self.assertIn("R.string.logged_in_as", login)
+        self.assertIn("R.string.login_unverified", login)
+        # No upstream branding in the sign-in flow.
+        self.assertNotIn("Echo", login + hosts)
 
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()

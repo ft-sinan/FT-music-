@@ -342,6 +342,8 @@
     <string name="action_logout">Cerrar sesión</string>
     <string name="action_login">Iniciar sesión</string>
     <string name="login">Iniciar sesión</string>
+    <string name="logged_in_as">Sesión iniciada como %1$s</string>
+    <string name="login_unverified">Sesión iniciada, pero FT Music no pudo confirmar los datos de la cuenta</string>
     <string name="show_audio_quality_badge">Mostrar insignia de calidad de audio</string>
     <string name="not_logged_in">No has iniciado sesión</string>
     <string name="login_failed">Error al iniciar sesión</string>
