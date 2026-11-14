@@ -96,48 +96,59 @@ sealed interface AudioTagEditResult {
   data class Failed(val reason: AudioTagEditFailure, val detail: String?) : AudioTagEditResult
 }
 
-private fun String.ffmpegEscape(): String = replace("'", "'\\''")
-
 /**
- * Builds the ffmpeg command that writes [edit] into [input] and writes the result to [output].
+ * Builds the ffmpeg argument list that writes [edit] into [input] and writes the result to
+ * [output], one argv element per flag and per value.
+ *
+ * This is an argument list and not a command string on purpose. `FFmpegKit.execute(String)` splits
+ * its string with `FFmpegKitConfig.parseArguments`, which treats `'` as a quote delimiter and does
+ * not implement the POSIX `'\''` idiom, so hand-escaping a value leaves a literal backslash in
+ * front of every apostrophe. A song titled "Don't Stop Me Now" was therefore tagged
+ * "Don\'t Stop Me Now". Passing argv means no parser ever sees the value, so nothing needs
+ * escaping and nothing can be mangled. Upstream fixed the same bug in `AudioExportService` this
+ * way in its security-audit commit `10ecaef1`.
  *
  * The audio stream is always copied (`-c:a copy`), never decoded or re-encoded, so tagging cannot
  * cost quality. When no new cover is supplied every existing stream is mapped through, which keeps
  * a cover the file already had; supplying one replaces it. A container that cannot hold a picture
  * gets its text tags and the caller says so.
  */
-internal fun buildTagCommand(
+internal fun buildTagArguments(
   input: String,
   output: String,
   edit: AudioTagEdit,
   container: TagContainer,
   coverPath: String?,
-): String {
-  val metadata = buildString {
-    append(" -metadata title='${edit.title.ffmpegEscape()}'")
-    append(" -metadata artist='${edit.artists.ffmpegEscape()}'")
-    edit.album?.takeIf { it.isNotBlank() }?.let {
-      append(" -metadata album='${it.ffmpegEscape()}'")
-    }
-    edit.year?.takeIf { it > 0 }?.let {
-      append(" -metadata date='$it'")
-      // MP3 and MP4 readers look at different year fields; write both where they are valid.
-      if (container == TagContainer.MP3 || container == TagContainer.MATROSKA) {
-        append(" -metadata year='$it'")
-      }
+): List<String> {
+  val metadata = mutableListOf<String>()
+  metadata += listOf("-metadata", "title=${edit.title}")
+  metadata += listOf("-metadata", "artist=${edit.artists}")
+  edit.album?.takeIf { it.isNotBlank() }?.let { metadata += listOf("-metadata", "album=$it") }
+  edit.year?.takeIf { it > 0 }?.let {
+    metadata += listOf("-metadata", "date=$it")
+    // MP3 and Matroska readers look at different year fields; write both where they are valid.
+    if (container == TagContainer.MP3 || container == TagContainer.MATROSKA) {
+      metadata += listOf("-metadata", "year=$it")
     }
   }
-  val mp3Id3 = if (container == TagContainer.MP3) " -id3v2_version 3" else ""
+  val mp3Id3 = if (container == TagContainer.MP3) listOf("-id3v2_version", "3") else emptyList()
   val embedCover = coverPath != null && container.supportsCover
   return if (embedCover) {
     val codec = if (edit.coverMimeType?.contains("png", ignoreCase = true) == true) "png" else "mjpeg"
-    "-y -i '${input.ffmpegEscape()}' -i '${coverPath!!.ffmpegEscape()}'" +
-      " -map 0:a:0 -map 1:v:0 -c:a copy -c:v $codec -disposition:v attached_pic" +
-      "$mp3Id3$metadata" +
-      " -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)'" +
-      " '${output.ffmpegEscape()}'"
+    listOf("-y", "-i", input, "-i", coverPath!!) +
+      listOf(
+        "-map", "0:a:0",
+        "-map", "1:v:0",
+        "-c:a", "copy",
+        "-c:v", codec,
+        "-disposition:v", "attached_pic",
+      ) +
+      mp3Id3 +
+      metadata +
+      listOf("-metadata:s:v", "title=Album cover", "-metadata:s:v", "comment=Cover (front)") +
+      output
   } else {
     // Keep every stream the file already has - including an existing cover - byte for byte.
-    "-y -i '${input.ffmpegEscape()}' -map 0 -c copy$mp3Id3$metadata '${output.ffmpegEscape()}'"
+    listOf("-y", "-i", input, "-map", "0", "-c", "copy") + mp3Id3 + metadata + output
   }
 }

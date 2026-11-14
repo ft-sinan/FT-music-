@@ -164,14 +164,14 @@ constructor(
             AudioTagEditResult.Failed(AudioTagEditFailure.NO_FILE, target.displayName)
           )
         val readable = source.file
-        val command = buildTagCommand(
+        val arguments = buildTagArguments(
           input = readable.absolutePath,
           output = output.absolutePath,
           edit = edit,
           container = container,
           coverPath = cover?.absolutePath,
         )
-        val ffmpegOk = runCatching { execute(command) }.getOrElse { error ->
+        val ffmpegOk = runCatching { execute(arguments) }.getOrElse { error ->
           Timber.w(error, "Tag edit failed for ${target.displayName}")
           return@withContext TagWriteOutcome(
             AudioTagEditResult.Failed(AudioTagEditFailure.WRITE_FAILED, error.message)
@@ -243,11 +243,15 @@ constructor(
     }.getOrNull()
   }
 
-  private suspend fun execute(command: String): Boolean =
+  /**
+   * Runs ffmpeg with an argument array rather than a command string: see [buildTagArguments] for why
+   * a string would corrupt any tag containing an apostrophe.
+   */
+  private suspend fun execute(arguments: List<String>): Boolean =
     withTimeoutOrNull(TAG_EDIT_TIMEOUT_MS) {
       suspendCancellableCoroutine { continuation ->
-        val session = FFmpegKit.executeAsync(command) { completed ->
-          if (!continuation.isActive) return@executeAsync
+        val session = FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray()) { completed ->
+          if (!continuation.isActive) return@executeWithArgumentsAsync
           val returnCode = completed.returnCode
           if (returnCode != null && ReturnCode.isSuccess(returnCode)) continuation.resume(true)
           else continuation.resumeWithException(

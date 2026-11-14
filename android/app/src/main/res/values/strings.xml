@@ -341,6 +341,8 @@
     <string name="action_logout">Log out</string>
     <string name="action_login">Log in</string>
     <string name="login">Login</string>
+    <string name="logged_in_as">Signed in as %1$s</string>
+    <string name="login_unverified">Signed in, but FT Music could not confirm your account details</string>
     <string name="show_audio_quality_badge">Show Music Quality badge</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="login_failed">Login failed</string>

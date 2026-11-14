@@ -229,8 +229,8 @@ class AudioExportService : Service() {
     year: Int?,
     artworkFile: File?,
   ) {
-    val command =
-      buildFfmpegCommand(
+    val arguments =
+      buildFfmpegArguments(
         inputPath = sourceFile.absolutePath,
         outputPath = outputFile.absolutePath,
         title = songTitle,
@@ -240,8 +240,8 @@ class AudioExportService : Service() {
         coverPath = artworkFile?.absolutePath,
       )
     suspendCancellableCoroutine<Unit> { continuation ->
-      val session = FFmpegKit.executeAsync(command) { completed ->
-        if (!continuation.isActive) return@executeAsync
+      val session = FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray()) { completed ->
+        if (!continuation.isActive) return@executeWithArgumentsAsync
         val returnCode = completed.returnCode
         if (returnCode != null && ReturnCode.isSuccess(returnCode) && outputFile.length() > 0L) {
           continuation.resume(Unit)
@@ -447,7 +447,15 @@ class AudioExportService : Service() {
         "song_${System.currentTimeMillis()}"
       }
 
-    private fun buildFfmpegCommand(
+    /**
+     * One argv element per flag and per value. `FFmpegKit.execute(String)` parses its string with
+     * `FFmpegKitConfig.parseArguments`, which reads `'` as a quote delimiter and does not implement
+     * the POSIX `'\''` idiom, so escaping values by hand left a literal backslash in front of every
+     * apostrophe and exported an MP3 titled "Don\'t Stop Me Now". Passing argv means no parser ever
+     * sees the value, so nothing needs escaping and nothing can be mangled. This mirrors the fix
+     * upstream applied to this same service in its security-audit commit `10ecaef1`.
+     */
+    private fun buildFfmpegArguments(
       inputPath: String,
       outputPath: String,
       title: String,
@@ -455,23 +463,21 @@ class AudioExportService : Service() {
       album: String,
       year: Int?,
       coverPath: String?,
-    ): String {
-      val escapedInput = inputPath.ffmpegEscape()
-      val escapedOutput = outputPath.ffmpegEscape()
-      val titleMeta = title.ffmpegEscape()
-      val artistMeta = artist.ffmpegEscape()
-      val albumMeta = album.ffmpegEscape()
-      val yearMeta = year?.toString()?.ffmpegEscape()
-      val dateFlags =
-        if (yearMeta != null) " -metadata date='$yearMeta' -metadata year='$yearMeta'" else ""
+    ): List<String> {
+      val metadata = mutableListOf("-metadata", "title=$title", "-metadata", "artist=$artist")
+      metadata += listOf("-metadata", "album=$album")
+      year?.let { metadata += listOf("-metadata", "date=$it", "-metadata", "year=$it") }
+      val encoder = listOf("-c:a", "libmp3lame", "-b:a", "320k", "-id3v2_version", "3")
       return if (coverPath != null) {
-        val escapedCover = coverPath.ffmpegEscape()
-        "-y -i '$escapedInput' -i '$escapedCover' -map 0:a -map 1:v -c:v mjpeg -disposition:v attached_pic -c:a libmp3lame -b:a 320k -id3v2_version 3 -metadata title='$titleMeta' -metadata artist='$artistMeta' -metadata album='$albumMeta'$dateFlags -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)' '$escapedOutput'"
+        listOf("-y", "-i", inputPath, "-i", coverPath) +
+          listOf("-map", "0:a", "-map", "1:v", "-c:v", "mjpeg", "-disposition:v", "attached_pic") +
+          encoder +
+          metadata +
+          listOf("-metadata:s:v", "title=Album cover", "-metadata:s:v", "comment=Cover (front)") +
+          outputPath
       } else {
-        "-y -i '$escapedInput' -c:a libmp3lame -b:a 320k -id3v2_version 3 -metadata title='$titleMeta' -metadata artist='$artistMeta' -metadata album='$albumMeta'$dateFlags '$escapedOutput'"
+        listOf("-y", "-i", inputPath) + encoder + metadata + outputPath
       }
     }
-
-    private fun String.ffmpegEscape(): String = replace("'", "'\\''")
   }
 }

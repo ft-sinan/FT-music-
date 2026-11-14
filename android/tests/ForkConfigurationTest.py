@@ -101,7 +101,8 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn('composable("login") { LoginScreen(navController) }', nav)
         self.assertIn('https://accounts.google.com/ServiceLogin?', login)
         self.assertIn('YouTube.useLoginForBrowse', settings)
-        self.assertIn('finishedUrl.host == "music.youtube.com"', login)
+        self.assertIn('host == "music.youtube.com"', login)
+        self.assertIn("val host = url?.let(Uri::parse)?.host?.lowercase().orEmpty()", login)
         self.assertNotIn('url?.startsWith("https://music.youtube.com")', login)
 
     def test_updates_are_ft_owned_and_verified_before_install(self):
@@ -411,8 +412,10 @@ class ForkConfigurationTest(unittest.TestCase):
         writer = (localmedia / "AudioTagWriter.kt").read_text()
         editor = (localmedia / "LocalSongInfoEditor.kt").read_text()
         # Retagging copies streams; it never decodes or re-encodes the audio.
-        self.assertIn('" -map 0:a:0 -map 1:v:0 -c:a copy -c:v $codec -disposition:v attached_pic"', tags)
-        self.assertIn("-map 0 -c copy$mp3Id3$metadata", tags)
+        self.assertIn('"-map", "0:a:0",', tags)
+        self.assertIn('"-c:a", "copy",', tags)
+        self.assertIn('"-disposition:v", "attached_pic",', tags)
+        self.assertIn('listOf("-y", "-i", input, "-map", "0", "-c", "copy")', tags)
         self.assertNotIn("libmp3lame", tags)
         self.assertNotIn("-b:a", tags)
         # Only containers ffmpeg can really mux a picture into claim to support a cover.
@@ -434,6 +437,42 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("deleteSongArtistMaps(songId)", writer)
         # A container that cannot hold a cover drops it rather than pretending to write one.
         self.assertIn("if (container.supportsCover) coverBytes else null", editor)
+
+    def test_ffmpeg_gets_an_argument_array_so_quotes_cannot_mangle_tags(self):
+        """Tags must reach ffmpeg as argv, never as a hand-escaped command string.
+
+        FFmpegKit.execute(String) splits the string itself with
+        FFmpegKitConfig.parseArguments, which reads ' as a quote delimiter and does not implement
+        the POSIX '\'' idiom. Escaping a value for that parser left a literal backslash in front of
+        every apostrophe, so "Don't Stop Me Now" was written into the file as "Don\'t Stop Me Now".
+        Passing an argument array puts no parser between FT Music and ffmpeg. Upstream fixed the same
+        bug in AudioExportService in its security-audit commit 10ecaef1; FT Music fixes both of its
+        ffmpeg call sites.
+        """
+        tags = (MAIN / "kotlin/com/music/echo/localmedia/AudioTagEdit.kt").read_text()
+        writer = (MAIN / "kotlin/com/music/echo/localmedia/AudioTagWriter.kt").read_text()
+        exporter = (MAIN / "kotlin/com/music/echo/playback/AudioExportService.kt").read_text()
+
+        self.assertIn("internal fun buildTagArguments(", tags)
+        self.assertIn("private fun buildFfmpegArguments(", exporter)
+        self.assertIn("FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray())", writer)
+        self.assertIn("FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray())", exporter)
+        for text in (tags, writer, exporter):
+            # The escaping helper is gone, and nothing calls the string-parsing entry point.
+            self.assertNotIn("ffmpegEscape", text)
+            self.assertNotIn("FFmpegKit.executeAsync(", text)
+        # A tag is one whole argument, so a quote or apostrophe inside it cannot move a boundary.
+        self.assertIn('metadata += listOf("-metadata", "title=${edit.title}")', tags)
+        self.assertIn('"-metadata", "title=$title"', exporter)
+
+        # Proven end to end on a real file, not only in the shape of the arguments: the instrumented
+        # suite writes an apostrophe-bearing title and reads the bytes back out.
+        instrumented = (
+            APP / "src/androidTest/kotlin/echo/music/iad1tya/localmedia/AudioTagWriterInstrumentedTest.kt"
+        ).read_text()
+        self.assertIn("fun apostrophesLandInTheTagsWithoutEscapingCharacters", instrumented)
+        self.assertIn("val title = \"Don't Stop Me Now\"", instrumented)
+        self.assertIn(r"tags.values.none { '\\' in it }", instrumented)
 
     def test_edit_info_reports_every_refusal_and_never_writes_before_apply(self):
         localmedia = MAIN / "kotlin/com/music/echo/localmedia"
@@ -468,6 +507,64 @@ class ForkConfigurationTest(unittest.TestCase):
             "ft_edit_info_audio_note", "ft_edit_info_saved", "ft_edit_info_search_hint",
         ):
             self.assertIn(f'<string name="{name}">', strings)
+
+    def test_sign_in_does_not_kill_the_app_or_trust_a_lookalike_host(self):
+        """Google sign-in has to work in an embedded WebView without tearing the app down.
+
+        Three things were wrong and all three came from upstream's own v1.4.6 fix, which FT Music
+        takes with one tightening: a successful sign-in used to relaunch the activity and call
+        Runtime.getRuntime().exit(0), which killed playback and every in-memory queue; Google's
+        two-factor step stalled because the user agent advertised an embedded WebView; and the sign-in
+        cookie was dropped as third-party. Upstream's host allowlist is an unanchored pattern that
+        also accepts google.com.attacker.example, so FT Music matches registrable-domain suffixes
+        instead.
+        """
+        login_file = (MAIN / "kotlin/com/music/echo/ui/screens/LoginScreen.kt").read_text()
+        # Judged on the code: the KDoc names the process-killing call it replaced, and a comment
+        # describing a removed bug must not read as the bug still being there.
+        login = re.sub(r"/[*].*?[*]/", "", login_file, flags=re.S)
+        hosts = (MAIN / "kotlin/com/music/echo/ui/screens/LoginHosts.kt").read_text()
+        strings = (MAIN / "res/values/strings.xml").read_text()
+
+        # Signing in navigates back; it does not kill the process or relaunch the activity.
+        self.assertNotIn("Runtime.getRuntime().exit", login)
+        self.assertNotIn("getLaunchIntentForPackage", login)
+        self.assertIn("if (!navController.navigateUp()) navController.backToMain()", login)
+
+        # Google's two-factor step rejects a user agent that says this is an embedded WebView.
+        self.assertIn('.replace("; wv", "")', login)
+        self.assertIn("VERSION_TOKEN_REGEX", login)
+        self.assertIn('Regex("Version/', login)
+        # The pages themselves need these, and the sign-in cookie is third-party to them.
+        for setting in (
+            "domStorageEnabled = true",
+            "databaseEnabled = true",
+            "setSupportMultipleWindows(true)",
+            "javaScriptCanOpenWindowsAutomatically = true",
+            "cookieManager.setAcceptThirdPartyCookies(this, true)",
+            # A WebView holding Google credentials has no business reading local files.
+            "allowFileAccess = false",
+            "allowContentAccess = false",
+        ):
+            self.assertIn(setting, login)
+        # Google opens recovery and help links in a new window; without this the flow dead-ends.
+        self.assertIn("override fun onCreateWindow(", login)
+
+        # The allowlist is suffix-based, not a pattern that matches a trusted name anywhere.
+        self.assertNotIn("ALLOWED_LOGIN_HOSTS_REGEX", login + hosts)
+        self.assertIn('normalized.endsWith(".$it")', hosts)
+        self.assertIn('"google.com",', hosts)
+        # Pure Kotlin, so the boundary is testable on the JVM without a device.
+        self.assertNotIn("import android", hosts)
+        self.assertNotIn("import androidx", hosts)
+
+        # Both outcomes are reported to the user, and neither is hardcoded English.
+        self.assertIn('name="logged_in_as"', strings)
+        self.assertIn('name="login_unverified"', strings)
+        self.assertIn("R.string.logged_in_as", login)
+        self.assertIn("R.string.login_unverified", login)
+        # No upstream branding in the sign-in flow.
+        self.assertNotIn("Echo", login + hosts)
 
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()

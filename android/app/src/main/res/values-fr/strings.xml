@@ -342,6 +342,8 @@
     <string name="action_logout">Se déconnecter</string>
     <string name="action_login">Se connecter</string>
     <string name="login">Connexion</string>
+    <string name="logged_in_as">Connecté en tant que %1$s</string>
+    <string name="login_unverified">Connecté, mais FT Music ne peut pas confirmer les détails du compte</string>
     <string name="show_audio_quality_badge">Afficher le badge de qualité musicale</string>
     <string name="not_logged_in">Non connecté</string>
     <string name="login_failed">Échec de la connexion</string>
