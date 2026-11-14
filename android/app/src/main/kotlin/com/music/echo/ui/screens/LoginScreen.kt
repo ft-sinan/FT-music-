@@ -214,13 +214,13 @@ fun LoginScreen(
                 evaluateJavascript(
                   "(function() { return (window.yt && window.yt.config_) ? window.yt.config_.VISITOR_DATA : ''; })();"
                 ) { value ->
-                  val unquoted = value?.removeSurrounding("\""")
+                  val unquoted = value?.removeSurrounding("\"")
                   if (!unquoted.isNullOrEmpty() && unquoted != "null") visitorData = unquoted
                 }
                 evaluateJavascript(
                   "(function() { return (window.yt && window.yt.config_) ? window.yt.config_.DATASYNC_ID : ''; })();"
                 ) { value ->
-                  val unquoted = value?.removeSurrounding("\""")
+                  val unquoted = value?.removeSurrounding("\"")
                   if (!unquoted.isNullOrEmpty() && unquoted != "null") {
                     dataSyncId = unquoted.substringBefore("||")
                   }
