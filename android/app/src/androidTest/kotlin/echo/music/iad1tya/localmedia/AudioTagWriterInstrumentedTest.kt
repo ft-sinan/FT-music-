@@ -330,6 +330,36 @@ class AudioTagWriterInstrumentedTest {
     assertEquals(setOf("Artist One", "Artist Two"), song.artists.map { it.name }.toSet())
   }
 
+  /**
+   * Apostrophes are everywhere in music, and ffmpeg's own command-string parser reads `'` as a quote
+   * delimiter without implementing the POSIX `'\''` idiom, so a hand-escaped value reached ffmpeg
+   * with a literal backslash: "Don't Stop Me Now" landed in the file as "Don\'t Stop Me Now". The
+   * fix is to hand ffmpeg an argument array instead of a string. These assertions are on the bytes
+   * read back out of the written file, not on any command FT Music built, so they fail if the
+   * corruption ever returns - and they are the reason the previous test's fixtures, which contain no
+   * apostrophe at all, are not sufficient on their own.
+   */
+  @Test
+  fun apostrophesLandInTheTagsWithoutEscapingCharacters() = runBlocking {
+    val fixture = publish("ft-tag-${UUID.randomUUID()}.wav", "audio/wav", wav)
+    val title = "Don't Stop Me Now"
+    val artists = "O'Brien, Sinead"
+    val album = "'round Midnight, Live at \"Wembley\""
+
+    val result = writer.write(
+      fixture.songId,
+      AudioTagEdit(title = title, artists = artists, album = album, year = 2011),
+    )
+
+    assertTrue("tag edit failed: ${result.result}", result.result is AudioTagEditResult.Written)
+    val tags = infoTags(readAll(fixture.uri))
+    assertEquals(title, tags["INAM"])
+    assertEquals(artists, tags["IART"])
+    assertEquals(album, tags["IPRD"])
+    assertEquals("2011", tags["ICRD"])
+    assertTrue("no tag may carry an escaping backslash: $tags", tags.values.none { '\\' in it })
+  }
+
   @Test
   fun aContainerThatCannotHoldACoverSaysSoInsteadOfFakingOne() = runBlocking {
     val fixture = publish("ft-tag-nocover-${UUID.randomUUID()}.wav", "audio/wav", wav)

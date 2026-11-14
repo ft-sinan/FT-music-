@@ -411,8 +411,10 @@ class ForkConfigurationTest(unittest.TestCase):
         writer = (localmedia / "AudioTagWriter.kt").read_text()
         editor = (localmedia / "LocalSongInfoEditor.kt").read_text()
         # Retagging copies streams; it never decodes or re-encodes the audio.
-        self.assertIn('" -map 0:a:0 -map 1:v:0 -c:a copy -c:v $codec -disposition:v attached_pic"', tags)
-        self.assertIn("-map 0 -c copy$mp3Id3$metadata", tags)
+        self.assertIn('"-map", "0:a:0",', tags)
+        self.assertIn('"-c:a", "copy",', tags)
+        self.assertIn('"-disposition:v", "attached_pic",', tags)
+        self.assertIn('listOf("-y", "-i", input, "-map", "0", "-c", "copy")', tags)
         self.assertNotIn("libmp3lame", tags)
         self.assertNotIn("-b:a", tags)
         # Only containers ffmpeg can really mux a picture into claim to support a cover.
@@ -434,6 +436,42 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("deleteSongArtistMaps(songId)", writer)
         # A container that cannot hold a cover drops it rather than pretending to write one.
         self.assertIn("if (container.supportsCover) coverBytes else null", editor)
+
+    def test_ffmpeg_gets_an_argument_array_so_quotes_cannot_mangle_tags(self):
+        """Tags must reach ffmpeg as argv, never as a hand-escaped command string.
+
+        FFmpegKit.execute(String) splits the string itself with
+        FFmpegKitConfig.parseArguments, which reads ' as a quote delimiter and does not implement
+        the POSIX '\'' idiom. Escaping a value for that parser left a literal backslash in front of
+        every apostrophe, so "Don't Stop Me Now" was written into the file as "Don\'t Stop Me Now".
+        Passing an argument array puts no parser between FT Music and ffmpeg. Upstream fixed the same
+        bug in AudioExportService in its security-audit commit 10ecaef1; FT Music fixes both of its
+        ffmpeg call sites.
+        """
+        tags = (MAIN / "kotlin/com/music/echo/localmedia/AudioTagEdit.kt").read_text()
+        writer = (MAIN / "kotlin/com/music/echo/localmedia/AudioTagWriter.kt").read_text()
+        exporter = (MAIN / "kotlin/com/music/echo/playback/AudioExportService.kt").read_text()
+
+        self.assertIn("internal fun buildTagArguments(", tags)
+        self.assertIn("private fun buildFfmpegArguments(", exporter)
+        self.assertIn("FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray())", writer)
+        self.assertIn("FFmpegKit.executeWithArgumentsAsync(arguments.toTypedArray())", exporter)
+        for text in (tags, writer, exporter):
+            # The escaping helper is gone, and nothing calls the string-parsing entry point.
+            self.assertNotIn("ffmpegEscape", text)
+            self.assertNotIn("FFmpegKit.executeAsync(", text)
+        # A tag is one whole argument, so a quote or apostrophe inside it cannot move a boundary.
+        self.assertIn('metadata += listOf("-metadata", "title=${edit.title}")', tags)
+        self.assertIn('"-metadata", "title=$title"', exporter)
+
+        # Proven end to end on a real file, not only in the shape of the arguments: the instrumented
+        # suite writes an apostrophe-bearing title and reads the bytes back out.
+        instrumented = (
+            APP / "src/androidTest/kotlin/echo/music/iad1tya/localmedia/AudioTagWriterInstrumentedTest.kt"
+        ).read_text()
+        self.assertIn("fun apostrophesLandInTheTagsWithoutEscapingCharacters", instrumented)
+        self.assertIn("val title = \"Don't Stop Me Now\"", instrumented)
+        self.assertIn(r"tags.values.none { '\\' in it }", instrumented)
 
     def test_edit_info_reports_every_refusal_and_never_writes_before_apply(self):
         localmedia = MAIN / "kotlin/com/music/echo/localmedia"

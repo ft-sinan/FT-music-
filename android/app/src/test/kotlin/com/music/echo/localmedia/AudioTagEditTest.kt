@@ -9,7 +9,7 @@ import org.junit.Test
 
 /**
  * Retagging must never touch the audio stream, must not claim a cover it cannot store, and must
- * report a search or download failure instead of guessing. These cover the command that ffmpeg is
+ * report a search or download failure instead of guessing. These cover the arguments ffmpeg is
  * handed and the editing decisions the sheet shows.
  */
 class AudioTagEditTest {
@@ -22,77 +22,123 @@ class AudioTagEditTest {
 
   @Test
   fun mp3TagsCopyTheAudioStreamInsteadOfReEncodingIt() {
-    val command = buildTagCommand("/in/a.mp3", "/out/a.mp3", edit, TagContainer.MP3, coverPath = null)
+    val args = buildTagArguments("/in/a.mp3", "/out/a.mp3", edit, TagContainer.MP3, coverPath = null)
 
-    assertTrue(command, command.contains("-c copy"))
-    assertFalse("audio must never be re-encoded", command.contains("libmp3lame"))
-    assertFalse(command, command.contains("-b:a"))
-    assertTrue(command, command.contains("-id3v2_version 3"))
-    assertTrue(command, command.contains("-metadata title='Midnight City'"))
-    assertTrue(command, command.contains("-metadata artist='M83, Anthony Gonzalez'"))
-    // An apostrophe in the album is escaped for the shell rather than silently dropped.
-    assertTrue(command, command.contains("""-metadata album='Hurry Up, We'\''re Dreaming'"""))
-    // MP3 readers look at both fields, so both are written.
-    assertTrue(command, command.contains("-metadata date='2011'"))
-    assertTrue(command, command.contains("-metadata year='2011'"))
+    assertRun("-c", "copy", inArgs = args)
+    assertNever("libmp3lame", inArgs = args, because = "audio must never be re-encoded")
+    assertNever("-b:a", inArgs = args, because = "no bitrate may be requested")
+    assertRun("-id3v2_version", "3", inArgs = args)
+    assertMeta("title", "Midnight City", args)
+    assertMeta("artist", "M83, Anthony Gonzalez", args)
+    // The apostrophe survives untouched - see apostrophesReachFfmpegUnchanged.
+    assertMeta("album", "Hurry Up, We're Dreaming", args)
+    // MP3 readers look at both year fields, so both are written.
+    assertMeta("date", "2011", args)
+    assertMeta("year", "2011", args)
   }
 
   @Test
   fun aContainerWithoutANewCoverKeepsEveryExistingStream() {
-    val command = buildTagCommand("/in/a.m4a", "/out/a.m4a", edit, TagContainer.MP4, coverPath = null)
+    val args = buildTagArguments("/in/a.m4a", "/out/a.m4a", edit, TagContainer.MP4, coverPath = null)
 
-    assertTrue("an embedded cover must survive", command.contains("-map 0 -c copy"))
-    assertFalse(command, command.contains("-id3v2_version"))
-    assertTrue(command, command.contains("-metadata date='2011'"))
-    assertFalse("MP4 has no year tag", command.contains("-metadata year="))
+    assertRun("-map", "0", "-c", "copy", inArgs = args, because = "an embedded cover must survive")
+    assertNever("-id3v2_version", inArgs = args, because = "MP4 has no ID3 tags")
+    assertMeta("date", "2011", args)
+    assertNever("year=2011", inArgs = args, because = "MP4 has no year tag")
   }
 
   @Test
   fun aNewCoverIsAttachedAsAPictureWithoutReEncodingAudio() {
-    val jpeg = buildTagCommand("/in/a.mp3", "/out/a.mp3", edit.copy(coverMimeType = "image/jpeg"), TagContainer.MP3, "/tmp/cover.jpg")
-    val png = buildTagCommand("/in/a.flac", "/out/a.flac", edit.copy(coverMimeType = "image/png"), TagContainer.FLAC, "/tmp/cover.png")
+    val jpeg = buildTagArguments(
+      "/in/a.mp3", "/out/a.mp3", edit.copy(coverMimeType = "image/jpeg"), TagContainer.MP3, "/tmp/cover.jpg"
+    )
+    val png = buildTagArguments(
+      "/in/a.flac", "/out/a.flac", edit.copy(coverMimeType = "image/png"), TagContainer.FLAC, "/tmp/cover.png"
+    )
 
-    assertTrue(jpeg, jpeg.contains("-map 0:a:0 -map 1:v:0"))
-    assertTrue(jpeg, jpeg.contains("-c:a copy"))
-    assertTrue(jpeg, jpeg.contains("-c:v mjpeg"))
-    assertTrue(jpeg, jpeg.contains("-disposition:v attached_pic"))
-    assertTrue(jpeg, jpeg.contains("-metadata:s:v comment='Cover (front)'"))
-    assertTrue(png, png.contains("-c:v png"))
-    assertFalse(png, png.contains("-id3v2_version"))
+    assertRun("-map", "0:a:0", "-map", "1:v:0", inArgs = jpeg)
+    assertRun("-c:a", "copy", inArgs = jpeg)
+    assertRun("-c:v", "mjpeg", inArgs = jpeg)
+    assertRun("-disposition:v", "attached_pic", inArgs = jpeg)
+    assertRun("-metadata:s:v", "comment=Cover (front)", inArgs = jpeg)
+    assertRun("-c:v", "png", inArgs = png)
+    assertNever("-id3v2_version", inArgs = png, because = "FLAC has no ID3 tags")
+    assertEquals("the cover is its own input", "/tmp/cover.png", png[4])
   }
 
   @Test
   fun aContainerThatCannotHoldACoverStillGetsItsTextTags() {
     listOf(TagContainer.OGG, TagContainer.WAV, TagContainer.MATROSKA).forEach { container ->
-      val command = buildTagCommand("/in/a.ogg", "/out/a.ogg", edit, container, "/tmp/cover.jpg")
+      val args = buildTagArguments("/in/a.ogg", "/out/a.ogg", edit, container, "/tmp/cover.jpg")
 
-      assertFalse("$container cannot store a picture", command.contains("-map 1:v:0"))
-      assertFalse("$container must not re-encode", command.contains("libmp3lame"))
-      assertTrue("$container keeps its text tags", command.contains("-metadata title='Midnight City'"))
+      assertNever("1:v:0", inArgs = args, because = "$container cannot store a picture")
+      assertNever("libmp3lame", inArgs = args, because = "$container must not re-encode")
+      assertMeta("title", "Midnight City", args)
     }
   }
 
+  /**
+   * `FFmpegKit.execute(String)` parses its string itself and reads `'` as a quote delimiter without
+   * implementing the POSIX `'\''` idiom, so a hand-escaped value reached ffmpeg with a literal
+   * backslash: "Don't Stop" was tagged "Don\'t Stop". Passing argv means nothing parses the value.
+   * This is the regression guard for that, and it also covers spaces in paths, which used to depend
+   * on quoting to survive.
+   */
   @Test
-  fun apostrophesInTagsAreEscapedForTheShell() {
-    val command = buildTagCommand(
-      "/in/a.mp3", "/out/a.mp3", edit.copy(title = "Don't Stop"), TagContainer.MP3, coverPath = null
+  fun apostrophesReachFfmpegUnchanged() {
+    val args = buildTagArguments(
+      "/in/My Song.mp3",
+      "/out/My Song.mp3",
+      AudioTagEdit(
+        title = "Don't Stop Me Now",
+        artists = "O'Brien, Sinead",
+        album = "'round Midnight, Live at \"Wembley\"",
+        year = null,
+      ),
+      TagContainer.MP3,
+      coverPath = "/tmp/O'Brien's cover.jpg",
     )
 
-    assertTrue(command, command.contains("""-metadata title='Don'\''t Stop'"""))
-    assertFalse(command, command.contains("title='Don't Stop'"))
+    assertMeta("title", "Don't Stop Me Now", args)
+    assertMeta("artist", "O'Brien, Sinead", args)
+    assertMeta("album", "'round Midnight, Live at \"Wembley\"", args)
+    assertEquals("/in/My Song.mp3", args[args.indexOf("-i") + 1])
+    assertEquals("/tmp/O'Brien's cover.jpg", args[args.lastIndexOf("-i") + 1])
+    assertEquals("the output path is one argument", "/out/My Song.mp3", args.last())
+    assertTrue("no value may carry escaping backslashes: $args", args.none { '\\' in it })
   }
 
   @Test
   fun missingOptionalTagsAreLeftOutEntirely() {
-    val command = buildTagCommand(
+    val args = buildTagArguments(
       "/in/a.mp3", "/out/a.mp3",
       AudioTagEdit(title = "Untitled", artists = "Unknown", album = null, year = null),
       TagContainer.MP3, coverPath = null,
     )
 
-    assertFalse(command, command.contains("-metadata album="))
-    assertFalse(command, command.contains("-metadata date="))
-    assertFalse(command, command.contains("-metadata year="))
+    assertTrue(args, args.none { it.startsWith("album=") })
+    assertTrue(args, args.none { it.startsWith("date=") })
+    assertTrue(args, args.none { it.startsWith("year=") })
+  }
+
+  /** Asserts [expected] appears in [inArgs] as one contiguous run of arguments. */
+  private fun assertRun(vararg expected: String, inArgs: List<String>, because: String? = null) {
+    val run = expected.toList()
+    val found = inArgs.windowed(run.size).any { it == run }
+    assertTrue((because ?: run.joinToString(" ")) + "\n" + inArgs, found)
+  }
+
+  private fun assertNever(expected: String, inArgs: List<String>, because: String) {
+    assertFalse("$because\n$inArgs", inArgs.contains(expected))
+  }
+
+  /**
+   * Asserts one `-metadata key=value` argument carries [value] exactly, with no escaping added.
+   * Matched as a contiguous run so a picture's own stream tag, which is also written as `title=`,
+   * cannot be mistaken for the song's title.
+   */
+  private fun assertMeta(key: String, value: String, args: List<String>) {
+    assertRun("-metadata", "$key=$value", inArgs = args, because = "$key must be written exactly")
   }
 
   @Test
