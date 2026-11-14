@@ -116,9 +116,10 @@ class AudioTagEditTest {
       TagContainer.MP3, coverPath = null,
     )
 
-    assertTrue(args, args.none { it.startsWith("album=") })
-    assertTrue(args, args.none { it.startsWith("date=") })
-    assertTrue(args, args.none { it.startsWith("year=") })
+    // JUnit's first argument is the failure message, so it has to be a String and not the list.
+    assertTrue("no album tag may be written: $args", args.none { it.startsWith("album=") })
+    assertTrue("no date tag may be written: $args", args.none { it.startsWith("date=") })
+    assertTrue("no year tag may be written: $args", args.none { it.startsWith("year=") })
   }
 
   /** Asserts [expected] appears in [inArgs] as one contiguous run of arguments. */
