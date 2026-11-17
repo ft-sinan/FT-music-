@@ -1,12 +1,13 @@
 package echo.music.iad1tya.viewmodels
 
 import android.content.Context
-import android.content.Intent
+import android.widget.Toast
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import echo.music.iad1tya.App
+import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.AccountChannelHandleKey
 import echo.music.iad1tya.constants.AccountEmailKey
 import echo.music.iad1tya.constants.AccountNameKey
@@ -44,7 +45,20 @@ constructor(
     }
   }
 
-  fun saveTokenAndRestart(
+  /**
+   * Makes [accountName] the active YouTube account. Writing the preferences is the whole operation.
+   *
+   * `App.observeSettingsChanges` already collects the cookie, visitor data and data sync id and
+   * assigns them to the live YouTube session, and `HomeViewModel` collects the cookie to clear the
+   * previous account's carousels and playlists, re-read the account name and avatar and reload them,
+   * discarding any result that came back under the old cookie. Logging out has always worked this
+   * way, through the same collectors.
+   *
+   * This used to relaunch the activity and then kill the process on top of all that, which stopped
+   * playback and destroyed every in-memory queue in order to change a preference the app was
+   * already watching. The user is told the switch happened, because nothing restarts to show it.
+   */
+  fun switchAccount(
     context: Context,
     cookie: String,
     visitorData: String,
@@ -63,10 +77,11 @@ constructor(
         settings[AccountChannelHandleKey] = accountChannelHandle
       }
       withContext(Dispatchers.Main) {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        context.startActivity(intent)
-        Runtime.getRuntime().exit(0)
+        Toast.makeText(
+          context,
+          context.getString(R.string.account_switched, accountName),
+          Toast.LENGTH_SHORT,
+        ).show()
       }
     }
   }

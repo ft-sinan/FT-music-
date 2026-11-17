@@ -22,6 +22,11 @@ This Android release is a modified fork of [Echo Music](https://github.com/EchoM
 - The set of hosts the sign-in WebView may load on its own is now an explicit list of Google and YouTube domains, matched as whole domains. Anything else is handed to your system browser, so a page FT Music did not expect never loads inside a WebView that is holding your Google credentials.
 - If your account details cannot be confirmed after sign-in — usually a transient network error — the login is still kept, and you are told the details could not be confirmed rather than being shown a success message FT Music cannot back up.
 
+**Switching accounts no longer restarts the app**
+
+- **Settings → Account → Switch accounts** used to relaunch the app and kill the process, which stopped your music and threw away the queue every time you changed account. FT Music was already watching the preference that switch writes — the same mechanism logout has always used — so the restart was doing nothing but destroying your playback. Switching now takes effect immediately, your music keeps playing, and a short message confirms which account is active.
+- The chooser's own labels — **Switch accounts**, **Remove account**, **Add another account** — were hardcoded English and are now translated into Spanish, French, Persian and Turkish like the rest of the app.
+
 ### Which APK should I download?
 
 Download **one** APK. All use the same FT Music package ID and signing certificate; the architecture-specific files are intended to be smaller. Android 8.0 or newer is required.
