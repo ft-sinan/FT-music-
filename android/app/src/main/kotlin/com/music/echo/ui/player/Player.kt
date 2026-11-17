@@ -1252,6 +1252,8 @@ fun BottomSheetPlayer(
                         primaryUrl = canvasArtwork?.animated,
                         fallbackUrl = canvasArtwork?.videoUrl,
                         isPlaying = isPlaying,
+                        clipStartMs = canvasArtwork?.clipStartMs,
+                        clipEndMs = canvasArtwork?.clipEndMs,
                         fitWideArtwork = true,
                         retryGeneration = manualCanvas?.generation ?: 0L,
                         onPlaybackFailure = if (manualCanvas != null) ({

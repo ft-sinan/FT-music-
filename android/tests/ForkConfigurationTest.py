@@ -706,6 +706,28 @@ class ForkConfigurationTest(unittest.TestCase):
             self.assertIn(f'name="{name}"', strings)
         self.assertNotIn('"Welcome to FT Music"', welcome)
 
+    def test_youtube_video_canvas_is_the_last_resort_backdrop(self):
+        # Echo's YouTube video canvas: when no Apple/Tidal/Echo animation exists, a
+        # muted 5-second clip of the official music video becomes the backdrop.
+        provider = (MAIN / "kotlin/com/music/echo/canvas/YouTubeVideoCanvasProvider.kt").read_text()
+        self.assertIn("object YouTubeVideoCanvasProvider", provider)
+        self.assertIn("fun getCanvasForVideo", provider)
+        self.assertIn("NewPipeExtractor.getVideoUrlAndDuration", provider)
+
+        artwork = (ROOT / "canvas/src/main/kotlin/com/music/echo/canvas/CanvasArtwork.kt").read_text()
+        self.assertIn("clipStartMs", artwork)
+        self.assertIn("clipEndMs", artwork)
+
+        player = (MAIN / "kotlin/com/music/echo/ui/player/CanvasArtworkPlayer.kt").read_text()
+        self.assertIn("setClippingConfiguration", player)
+        self.assertIn("updateTextureTransform", player)
+        self.assertIn("InnerTubeXResolver.headersFor", player)
+
+        thumb = (MAIN / "kotlin/com/music/echo/ui/player/Thumbnail.kt").read_text()
+        self.assertIn("YouTubeVideoCanvasProvider.getCanvasForVideo", thumb)
+        self.assertIn("clipStartMs = artwork.clipStartMs", thumb)
+        self.assertIn("clipEndMs = artwork.clipEndMs", thumb)
+
     def test_podcast_playback_rules_and_video_player_are_wired(self):
         playback = MAIN / "kotlin/com/music/echo/playback"
         service = (playback / "MusicService.kt").read_text()
