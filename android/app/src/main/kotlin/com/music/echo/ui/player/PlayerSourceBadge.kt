@@ -11,6 +11,3 @@ internal fun playerSourceBadge(origin: PlaybackOrigin?, isCasting: Boolean): Pla
     origin == PlaybackOrigin.DEVICE || origin == PlaybackOrigin.FT_DOWNLOAD -> PlayerSourceBadge.LOCAL
     else -> null
   }
-
-internal fun playerDetailsText(sourceLabel: String?, qualityLabel: String): String =
-  if (sourceLabel == null) qualityLabel else "$sourceLabel · $qualityLabel"

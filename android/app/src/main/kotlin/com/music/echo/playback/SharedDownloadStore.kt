@@ -303,11 +303,45 @@ class SharedDownloadStore @Inject constructor(
       if (position != knownLength) return@withLock PublishResult.UNAVAILABLE
 
       var published: Published? = null
+      var stagedInput: File? = null
+      var stagedOutput: File? = null
+      var publishName = name
+      var publishMime = mime
+      var publishFiles = spans.map { it.file!! }
+      var publishSize = knownLength
       try {
+        // Opus-in-WebM scans as video/webm, which makes every file manager file a pure-audio
+        // download under Videos behind a video icon. Republish the same packets in an Ogg
+        // container so the copy is recognised as audio; when the remux cannot run or fails we
+        // publish the original bytes exactly as before.
+        if (SharedDownloadNames.isWebmAudio(mime)) {
+          val staging = File(context.cacheDir, "ft-publish-remux")
+          if (staging.isDirectory || staging.mkdirs()) {
+            staging.listFiles()?.forEach { stale -> stale.delete() }
+            val input = File.createTempFile("ft-remux-", ".webm", staging)
+            stagedInput = input
+            val output = File(staging, "${input.nameWithoutExtension}.opus")
+            stagedOutput = output
+            try {
+              copyFiles(publishFiles, FileOutputStream(input), knownLength)
+              if (OpusRepublisher.remux(input, output)) {
+                publishName =
+                  SharedDownloadNames.fileName(id, title, artist, SharedDownloadNames.OPUS_EXTENSION)
+                publishMime = SharedDownloadNames.OPUS_MIME_TYPE
+                publishFiles = listOf(output)
+                publishSize = output.length()
+              }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+              throw e
+            } catch (e: Exception) {
+              Timber.w(e, "Opus remux unavailable; publishing the original container")
+            }
+          }
+        }
         published = if (Build.VERSION.SDK_INT >= 29) {
-          publishMediaStore(name, mime, spans.map { it.file!! }, knownLength)
+          publishMediaStore(publishName, publishMime, publishFiles, publishSize)
         } else {
-          publishLegacy(name, mime, spans.map { it.file!! }, knownLength)
+          publishLegacy(publishName, publishMime, publishFiles, publishSize)
         }
         // Persist the association before discarding a single private cache byte.
         check(preferences.edit().putString(id, requireNotNull(published).encode()).commit())
@@ -328,6 +362,9 @@ class SharedDownloadStore @Inject constructor(
         Timber.w(e, "Unable to publish FT download; keeping its private cache")
         published?.let { discardPublished(it) }
         PublishResult.UNAVAILABLE
+      } finally {
+        stagedInput?.delete()
+        stagedOutput?.delete()
       }
     }
   }

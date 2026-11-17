@@ -62,16 +62,24 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("onPlayerBackgroundChange(PlayerBackgroundStyle.APPLE_MUSIC)", settings)
         self.assertRegex(settings, r"MiniPlayerBackgroundStyleKey,\s*defaultValue = PlayerBackgroundStyle.DEFAULT")
 
-    def test_player_source_label_is_simple_and_keeps_quality(self):
+    def test_player_source_label_is_simple_and_echo_codec_box_is_default(self):
         player_dir = MAIN / "kotlin/com/music/echo/ui/player"
         player = (player_dir / "Player.kt").read_text()
         badge = (player_dir / "PlayerSourceBadge.kt").read_text()
         self.assertIn("playerSourceBadge(playbackOrigins[mediaMetadata.id], isCasting)", player)
         self.assertIn("PlayerSourceBadge.LOCAL -> stringResource(R.string.filter_local)", player)
-        self.assertIn("playerDetailsText(sourceLabel, qualityLabel)", player)
         self.assertIn("origin == PlaybackOrigin.DEVICE || origin == PlaybackOrigin.FT_DOWNLOAD", badge)
         self.assertNotIn('"Streaming / cache"', player)
         self.assertEqual(ET.parse(MAIN / "res/values/strings.xml").find("string[@name='filter_local']").text, "Local")
+        # The duplicated always-on quality line is gone; Echo's own codec box is the single
+        # quality indicator, on by default, reading the format the player really decodes.
+        self.assertNotIn("playerDetailsText(", player)
+        self.assertNotIn("playerDetailsText", badge)
+        self.assertIn(
+            "rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, true)", player
+        )
+        settings = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AppearanceSettings.kt").read_text()
+        self.assertIn("ShowCodecOnPlayerKey, defaultValue = true", settings)
 
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())
@@ -614,6 +622,31 @@ class ForkConfigurationTest(unittest.TestCase):
             local = (MAIN / f"res/values-{loc}/strings.xml").read_text()
             for name in ("switch_accounts", "remove_account", "add_another_account", "account_switched"):
                 self.assertIn(f'name="{name}"', local)
+
+    def test_opus_downloads_are_republished_as_audio_not_video(self):
+        playback = APP / "src/main/kotlin/com/music/echo/playback"
+        store = (playback / "SharedDownloadStore.kt").read_text()
+        republisher = (playback / "OpusRepublisher.kt").read_text()
+        service = (playback / "MusicService.kt").read_text()
+        downloads = (playback / "DownloadUtil.kt").read_text()
+        player = (APP / "src/main/kotlin/com/music/echo/utils/YTPlayerUtils.kt").read_text()
+        # The publish path remuxes Opus/WebM into Ogg instead of leaving a video-typed file.
+        self.assertIn("SharedDownloadNames.isWebmAudio(mime)", store)
+        self.assertIn("OpusRepublisher.remux(input, output)", store)
+        self.assertIn("SharedDownloadNames.OPUS_EXTENSION", store)
+        self.assertIn("SharedDownloadNames.OPUS_MIME_TYPE", store)
+        # A stream copy, handed over as an argument array: never transcoded, never shell-parsed.
+        self.assertIn('listOf("-hide_banner", "-i", input, "-c", "copy", output)', republisher)
+        self.assertIn("executeWithArgumentsAsync", republisher)
+        self.assertNotIn("FFmpegKit.execute(", republisher)
+        # The badge can no longer be fed a made-up bitrate for replayed or addon streams.
+        self.assertNotIn("bitrate = 160000", service)
+        self.assertNotIn("bitrate = if (flac) 1411000 else 320000", service)
+        # The download date is stamped on completion, atomically, even without a song row.
+        self.assertNotIn("dateDownload = existing.dateDownload ?: now", downloads)
+        self.assertIn("if (rowId == -1L) database.updateDownloadedInfo(id, true, date)", downloads)
+        # No listener is capped below the best rung YouTube will serve.
+        self.assertNotIn("coerceAtMost(160)", player)
 
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()

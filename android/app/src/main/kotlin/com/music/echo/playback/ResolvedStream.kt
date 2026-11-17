@@ -11,6 +11,10 @@ internal data class ResolvedStream(
   val expiresAtMs: Long,
   val headers: Map<String, String>,
   val isFromExtension: Boolean = false,
+  /** Bitrate the source actually reported for this stream; 0 when it reported none. */
+  val bitrate: Int = 0,
+  val mimeType: String? = null,
+  val sampleRate: Int = 0,
 ) {
   fun resolve(dataSpec: DataSpec): DataSpec =
     dataSpec.buildUpon()
@@ -31,6 +35,9 @@ internal data class ResolvedStream(
           ?: InnerTubeXResolver.headersFor(playbackData.streamUrl)
           ?: PlayerClient.forStreamUrl(playbackData.streamUrl).mediaHeaders(),
         isFromExtension = isFromExtension,
+        bitrate = playbackData.format.bitrate,
+        mimeType = playbackData.format.mimeType,
+        sampleRate = playbackData.format.audioSampleRate ?: 0,
       )
   }
 }
