@@ -23,11 +23,4 @@ class PlayerSourceBadgeTest {
     }
     assertEquals(PlayerSourceBadge.CASTING, playerSourceBadge(null, isCasting = true))
   }
-
-  @Test fun qualityRemainsVisibleWithOrWithoutASourceLabel() {
-    assertEquals("Local · Opus · 128 kbps", playerDetailsText("Local", "Opus · 128 kbps"))
-    assertEquals("Opus · 128 kbps", playerDetailsText(null, "Opus · 128 kbps"))
-    assertEquals("Quality unknown", playerDetailsText(null, "Quality unknown"))
-    assertEquals("Casting · Quality unknown", playerDetailsText("Casting", "Quality unknown"))
-  }
 }

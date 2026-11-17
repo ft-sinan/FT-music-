@@ -65,6 +65,7 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 
 - Replaying an already-resolved stream (a zero-network cache hit) reused a stand-in format that claimed 160 kbps WebM at 48 kHz whatever the real stream was. A resolved stream now carries its real bitrate, container and sample rate, and everything downstream reads those.
 - Addon (extension) streams may report their real bitrate and sample rate; when an addon does not know them, the badge leaves the number out instead of showing a guess.
+- The player now has exactly one quality indicator: Echo's own codec box, switched on by default (it can still be turned off under Appearance). It reads the format the player is actually decoding. The separate always-on quality line we had added under the song title is gone; that line now only names a confirmed source (Local, Casting).
 
 **Download lists stay correct on their own**
 

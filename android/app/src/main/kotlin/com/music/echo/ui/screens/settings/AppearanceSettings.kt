@@ -192,7 +192,7 @@ fun AppearanceSettings(
   val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
     rememberPreference(UseNewPlayerDesignKey, defaultValue = DefaultPlayerAppearance.USE_NEW_PLAYER_DESIGN)
   val (showCodecOnPlayer, onShowCodecOnPlayerChange) =
-    rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, defaultValue = false)
+    rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, defaultValue = true)
   val (hidePlayerSlider, onHidePlayerSliderChange) =
     rememberPreference(echo.music.iad1tya.constants.HidePlayerSliderKey, defaultValue = false)
   val (hidePlayerThumbnail, onHidePlayerThumbnailChange) =

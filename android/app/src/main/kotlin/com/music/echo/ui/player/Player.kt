@@ -301,7 +301,7 @@ fun BottomSheetPlayer(
   val (musicFlowEnabled) =
     rememberPreference(MusicFlowEnabledKey, defaultValue = true)
   val showCodecOnPlayer by
-    rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, false)
+    rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, true)
   val hidePlayerSlider by
     rememberPreference(echo.music.iad1tya.constants.HidePlayerSliderKey, false)
   val (hidePlayerThumbnail, onHidePlayerThumbnailChange) =
@@ -1593,22 +1593,18 @@ fun BottomSheetPlayer(
             PlayerSourceBadge.CASTING -> "Casting"
             null -> null
           }
-          val qualityLabel = if (isCasting) "Quality unknown" else {
-            echo.music.iad1tya.playback.PlaybackQuality.describe(
-              currentAudioFormat?.sampleMimeType,
-              currentAudioFormat?.codecs,
-              currentAudioFormat?.bitrate ?: -1,
-              currentAudioFormat?.sampleRate ?: -1,
+          // Quality itself is Echo's own codec box on the player (ShowCodecOnPlayerKey, on by
+          // default); this line only names a confirmed source, and stays hidden otherwise.
+          if (sourceLabel != null) {
+            Text(
+              text = sourceLabel,
+              style = MaterialTheme.typography.labelSmall,
+              color = TextBackgroundColor.copy(alpha = 0.76f),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
+            Spacer(Modifier.height(4.dp))
           }
-          Text(
-            text = playerDetailsText(sourceLabel, qualityLabel),
-            style = MaterialTheme.typography.labelSmall,
-            color = TextBackgroundColor.copy(alpha = 0.76f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-          Spacer(Modifier.height(4.dp))
 
           if (isCasting && castDeviceName != null) {
             Row(

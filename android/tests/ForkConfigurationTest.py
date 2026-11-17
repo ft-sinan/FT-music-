@@ -62,16 +62,24 @@ class ForkConfigurationTest(unittest.TestCase):
         self.assertIn("onPlayerBackgroundChange(PlayerBackgroundStyle.APPLE_MUSIC)", settings)
         self.assertRegex(settings, r"MiniPlayerBackgroundStyleKey,\s*defaultValue = PlayerBackgroundStyle.DEFAULT")
 
-    def test_player_source_label_is_simple_and_keeps_quality(self):
+    def test_player_source_label_is_simple_and_echo_codec_box_is_default(self):
         player_dir = MAIN / "kotlin/com/music/echo/ui/player"
         player = (player_dir / "Player.kt").read_text()
         badge = (player_dir / "PlayerSourceBadge.kt").read_text()
         self.assertIn("playerSourceBadge(playbackOrigins[mediaMetadata.id], isCasting)", player)
         self.assertIn("PlayerSourceBadge.LOCAL -> stringResource(R.string.filter_local)", player)
-        self.assertIn("playerDetailsText(sourceLabel, qualityLabel)", player)
         self.assertIn("origin == PlaybackOrigin.DEVICE || origin == PlaybackOrigin.FT_DOWNLOAD", badge)
         self.assertNotIn('"Streaming / cache"', player)
         self.assertEqual(ET.parse(MAIN / "res/values/strings.xml").find("string[@name='filter_local']").text, "Local")
+        # The duplicated always-on quality line is gone; Echo's own codec box is the single
+        # quality indicator, on by default, reading the format the player really decodes.
+        self.assertNotIn("playerDetailsText(", player)
+        self.assertNotIn("playerDetailsText", badge)
+        self.assertIn(
+            "rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, true)", player
+        )
+        settings = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AppearanceSettings.kt").read_text()
+        self.assertIn("ShowCodecOnPlayerKey, defaultValue = true", settings)
 
     def test_font_is_redistributable(self):
         self.assertFalse((MAIN / "res/font/google_sans_flex.ttf").exists())
