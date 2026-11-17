@@ -673,6 +673,37 @@ class ForkConfigurationTest(unittest.TestCase):
                 adaptive = (MAIN / f"res/mipmap-anydpi-v26/{name}{suffix}.xml").read_text()
                 self.assertIn(f"@color/{name}_background", adaptive)
                 self.assertIn(f"@mipmap/{name}_foreground", adaptive)
+        # The community web lines mark is the default icon: application tag, default alias and
+        # every surface that shows "the app icon" must point at it; the web note stays selectable.
+        app_block = manifest.split("<application")[1].split(">")[0]
+        self.assertIn('android:icon="@mipmap/web_lines_icon"', app_block)
+        default_block = manifest.split('android:name=".MainActivityAlias"')[1].split("</activity-alias>")[0]
+        self.assertIn('android:icon="@mipmap/web_lines_icon"', default_block)
+        welcome = (MAIN / "kotlin/com/music/echo/ui/screens/WelcomeDialog.kt").read_text()
+        self.assertIn("R.mipmap.web_lines_icon", welcome)
+        self.assertIn("R.mipmap.web_note_icon", screen)
+        for density in ("ldpi", "mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"):
+            self.assertTrue((MAIN / f"res/mipmap-{density}/web_lines_icon.png").is_file(), density)
+            self.assertTrue((MAIN / f"res/mipmap-{density}/web_lines_icon_round.png").is_file(), density)
+
+    def test_playback_artwork_is_requested_at_full_size(self):
+        # Database rows may hold small thumbnail variants; everything that plays a song
+        # (player, notification, lock screen, widgets) must still ask for the large one.
+        mappers = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/models/MediaMetadataMappers.kt").read_text()
+        self.assertIn("song.thumbnailUrl?.resize(1200, 1200)", mappers)
+        resize = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/ui/utils/YouTubeUtils.kt").read_text()
+        self.assertIn("1200", resize)
+
+    def test_welcome_card_is_spidey_themed_and_translatable(self):
+        welcome = (MAIN / "kotlin/com/music/echo/ui/screens/WelcomeDialog.kt").read_text()
+        strings = (MAIN / "res/values/strings.xml").read_text()
+        # The premium minimal card: web line art, the community mark, translatable copy.
+        self.assertIn("SpiderWebCorner", welcome)
+        self.assertIn("R.mipmap.web_lines_icon", welcome)
+        for name in ("welcome_title", "welcome_tagline", "welcome_get_started"):
+            self.assertIn(f"R.string.{name}", welcome)
+            self.assertIn(f'name="{name}"', strings)
+        self.assertNotIn('"Welcome to FT Music"', welcome)
 
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()

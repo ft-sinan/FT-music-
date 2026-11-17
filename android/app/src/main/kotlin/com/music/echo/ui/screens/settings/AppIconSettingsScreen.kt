@@ -136,9 +136,9 @@ fun AppIconSettingsScreen(
         ),
         AppIconOption(
           AppIconType.DEFAULT,
-          "New Icon",
-          "The standard vibrant icon",
-          R.mipmap.ic_launcher
+          "Default",
+          "FT web lines on red, the community logo",
+          R.mipmap.web_lines_icon
         ),
         AppIconOption(AppIconType.POOKIE, "Pookie Icon", "A Cute Pink icon", R.mipmap.pookie_icon),
         AppIconOption(
@@ -163,9 +163,9 @@ fun AppIconSettingsScreen(
         AppIconOption(
           AppIconType.WEB_NOTE,
           "Web Note",
-          "FT web note on red, from the community logo art",
+          "FT web note on red, the earlier community mark",
           R.mipmap.web_note_icon
-        )
+        ),
       ).sortedBy { it.title.lowercase() }
 
     Column(

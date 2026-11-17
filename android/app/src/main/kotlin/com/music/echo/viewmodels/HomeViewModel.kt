@@ -13,6 +13,7 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.YTItem
 import com.music.innertube.models.filterExplicit
+import com.music.innertube.models.filterPodcasts
 import com.music.innertube.models.filterVideoSongs
 import com.music.innertube.models.filterYoutubeShorts
 import com.music.innertube.pages.ExplorePage
@@ -726,6 +727,7 @@ constructor(
                         .filterExplicit(hideExplicit)
                         .filterVideoSongs(hideVideoSongs)
                         .filterYoutubeShorts(hideYoutubeShorts)
+                        .filterPodcasts()
                     if (filteredItems.isEmpty()) null else section.copy(items = filteredItems)
                   }
               )
@@ -784,6 +786,7 @@ constructor(
                 .filterExplicit(hideExplicit)
                 .filterVideoSongs(hideVideoSongs)
                 .filterYoutubeShorts(hideYoutubeShorts)
+                .filterPodcasts()
             if (filteredItems.isEmpty()) null else section.copy(items = filteredItems)
           }
 
@@ -834,6 +837,7 @@ constructor(
                     .filterExplicit(hideExplicit)
                     .filterVideoSongs(hideVideoSongs)
                     .filterYoutubeShorts(hideYoutubeShorts)
+                    .filterPodcasts()
               )
             }
         )
@@ -857,6 +861,7 @@ constructor(
             .filterIsInstance<PlaylistItem>()
             .filterNot { it.id == "SE" }
             .filterYoutubeShorts(hideYoutubeShorts)
+            .filterPodcasts()
       }
       .onFailure { reportException(it) }
 

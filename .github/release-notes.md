@@ -75,3 +75,15 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **Up to 320 kbps for every listener**
 
 - Stream selection no longer branches on sign-in: Auto and High ask YouTube for the best rung it will serve for anyone, up to 320 kbps. What actually plays is whatever YouTube returns, and the badge reports that real format.
+
+**Artwork is fetched at full size everywhere**
+
+- Songs played from your library used to carry whatever small thumbnail variant the database row held, so the notification, lock screen and widgets could show a soft picture while the player looked sharp. Playback metadata now always requests the large artwork variant, and album, online-playlist and local-playlist headers do the same.
+
+**The community web note is now the default icon**
+
+- Fresh installs and everyone on the standard icon now see the community mark on red: a spider-web badge carrying three cream sound-wave lines, drawn as original art (the web's own spokes cross the lines). The earlier web note and the web badge remain selectable in Settings → App icon, with all earlier alternates; the welcome dialog and shared cards show the new mark too.
+
+**A premium minimal welcome card**
+
+- The first-launch card is now a dark, quiet surface with the community web note in a cream hairline frame, thin spider-web line art in two corners, one tagline and a single red action - no clutter, and all of its text is translatable.
