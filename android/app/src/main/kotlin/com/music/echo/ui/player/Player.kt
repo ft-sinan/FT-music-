@@ -1605,6 +1605,55 @@ fun BottomSheetPlayer(
             )
             Spacer(Modifier.height(4.dp))
           }
+          val podcastSpeed by echo.music.iad1tya.utils.PodcastProgress.speed.collectAsState()
+          val isPodcastEpisode =
+            mediaMetadata?.let {
+              echo.music.iad1tya.utils.PodcastProgress.isEpisode(
+                it,
+                playerConnection.player.duration.coerceAtLeast(0L),
+              )
+            } == true
+          if (isPodcastEpisode) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+              androidx.compose.material3.IconButton(
+                onClick = {
+                  playerConnection.seekTo(
+                    (playerConnection.player.currentPosition -
+                        echo.music.iad1tya.utils.PodcastProgress.SKIP_BACK_MS)
+                      .coerceAtLeast(0L)
+                  )
+                }
+              ) {
+                Icon(painterResource(R.drawable.replay), contentDescription = null)
+              }
+              Text(
+                text = echo.music.iad1tya.utils.PodcastProgress.speedLabel(podcastSpeed),
+                style = MaterialTheme.typography.labelLarge,
+                color = TextBackgroundColor,
+                modifier =
+                  Modifier.clickable { echo.music.iad1tya.utils.PodcastProgress.cycleSpeed() },
+              )
+              androidx.compose.material3.IconButton(
+                onClick = {
+                  playerConnection.seekTo(
+                    playerConnection.player.currentPosition +
+                      echo.music.iad1tya.utils.PodcastProgress.SKIP_FORWARD_MS
+                  )
+                }
+              ) {
+                Icon(painterResource(R.drawable.fast_forward), contentDescription = null)
+              }
+              androidx.compose.material3.IconButton(
+                onClick = { navController.navigate("podcast_video") }
+              ) {
+                Icon(painterResource(R.drawable.ic_ft_video), contentDescription = null)
+              }
+            }
+            Spacer(Modifier.height(4.dp))
+          }
 
           if (isCasting && castDeviceName != null) {
             Row(

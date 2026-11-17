@@ -32,11 +32,18 @@ class OnlinePlaylistViewModel
 constructor(
   @ApplicationContext private val context: Context,
   savedStateHandle: SavedStateHandle,
-  database: MusicDatabase
+  database: MusicDatabase,
+  private val podcastShows: echo.music.iad1tya.utils.PodcastShowStore,
 ) : ViewModel() {
   private val playlistId = savedStateHandle.get<String>("playlistId")!!
 
   val playlist = MutableStateFlow<PlaylistItem?>(null)
+
+  /** Keeps the local follow set in step with the library bookmark of a show. */
+  fun syncPodcastFollow(showId: String, saved: Boolean) {
+    if (saved) podcastShows.add(showId) else podcastShows.remove(showId)
+  }
+
   val playlistSongs = MutableStateFlow<List<SongItem>>(emptyList())
   val relatedItems = MutableStateFlow<List<YTItem>>(emptyList())
 
@@ -71,6 +78,7 @@ constructor(
       YouTube.playlist(playlistId)
         .onSuccess { playlistPage ->
           playlist.value = playlistPage.playlist
+          if (playlistPage.playlist.isPodcast) podcastShows.add(playlistPage.playlist.id)
           playlistSongs.value = applySongFilters(playlistPage.songs)
           relatedItems.value = playlistPage.related ?: emptyList()
           continuation = playlistPage.songsContinuation

@@ -706,6 +706,38 @@ class ForkConfigurationTest(unittest.TestCase):
             self.assertIn(f'name="{name}"', strings)
         self.assertNotIn('"Welcome to FT Music"', welcome)
 
+    def test_podcast_playback_rules_and_video_player_are_wired(self):
+        playback = MAIN / "kotlin/com/music/echo/playback"
+        service = (playback / "MusicService.kt").read_text()
+        player = (MAIN / "kotlin/com/music/echo/ui/player/Player.kt").read_text()
+        nav = (MAIN / "kotlin/com/music/echo/ui/screens/NavigationBuilder.kt").read_text()
+        # Never cache podcast streams: the per-spec switch consults the policy.
+        self.assertIn("PodcastStreamPolicy::neverCache", service)
+        self.assertTrue((playback / "PodcastStreamPolicy.kt").is_file())
+        # Progress recording, resume and the podcast speed live in the service.
+        self.assertIn("PodcastProgress.update(meta, player.currentPosition, dur)", service)
+        self.assertIn("startPodcastProgressPoll()", service)
+        self.assertIn("PodcastProgress.speed.value", service)
+        # Skip buttons, speed cycling and the video entry are on the player.
+        self.assertIn("SKIP_BACK_MS", player)
+        self.assertIn("SKIP_FORWARD_MS", player)
+        self.assertIn("cycleSpeed()", player)
+        self.assertIn('navController.navigate("podcast_video")', player)
+        self.assertIn('composable("podcast_video")', nav)
+        self.assertTrue(
+            (MAIN / "kotlin/com/music/echo/ui/screens/podcast/PodcastVideoScreen.kt").is_file()
+        )
+        self.assertTrue((MAIN / "kotlin/com/music/echo/podcast/PodcastVideoProvider.kt").is_file())
+
+    def test_ft_wrapped_is_ft_branded(self):
+        wrapped = MAIN / "kotlin/com/music/echo/ui/screens/wrapped"
+        screen = (wrapped / "WrappedScreen.kt").read_text()
+        share = (wrapped / "WrappedShareHelper.kt").read_text()
+        self.assertIn("FT Wrapped", screen)
+        self.assertIn("FT Wrapped", share)
+        self.assertNotIn("Echo Wrapped", screen)
+        self.assertNotIn("Echo Wrapped", share)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

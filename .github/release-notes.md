@@ -87,3 +87,12 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **A premium minimal welcome card**
 
 - The first-launch card is now a dark, quiet surface with the community web note in a cream hairline frame, thin spider-web line art in two corners, one tagline and a single red action - no clutter, and all of its text is translatable.
+
+**Podcasts, complete**
+
+- Shows, episodes, follows, Continue listening and the Podcasts tab are joined by the playback half: episodes resume where you stopped, keep their own playback speed (cycle it from the player), get 15 s back / 30 s forward skip buttons, and a fullscreen landscape video player for video episodes.
+- Podcast streams never touch the streaming cache - a download is the only on-device copy of an episode - while ordinary songs keep the one-hour cache exactly as before.
+
+**FT Wrapped**
+
+- Your year in nine animated slides - totals, top songs and artists, listening persona and a shareable story card - under the FT name throughout.

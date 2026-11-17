@@ -28,6 +28,13 @@ class PodcastShowStore @Inject constructor(@ApplicationContext context: Context)
     prefs.edit { putStringSet(KEY_IDS, updated) }
   }
 
+  fun remove(id: String) {
+    if (id !in _ids.value) return
+    val updated = _ids.value - id
+    _ids.value = updated
+    prefs.edit { putStringSet(KEY_IDS, updated) }
+  }
+
   private companion object {
     const val PREFS_NAME = "podcast_shows"
     const val KEY_IDS = "ids"
