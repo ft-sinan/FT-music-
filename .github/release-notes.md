@@ -79,3 +79,7 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **Artwork is fetched at full size everywhere**
 
 - Songs played from your library used to carry whatever small thumbnail variant the database row held, so the notification, lock screen and widgets could show a soft picture while the player looked sharp. Playback metadata now always requests the large artwork variant, and album, online-playlist and local-playlist headers do the same.
+
+**The community web note is now the default icon**
+
+- Fresh installs and everyone on the standard icon now see the red web-textured note from the community logo art. The web badge and all earlier alternates remain selectable in Settings → App icon; the welcome dialog and shared cards show the new mark too. Say the word if you want the old ring icon kept as a selectable "Classic" option.

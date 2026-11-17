@@ -249,7 +249,7 @@ object ComposeToImage {
 
       canvas.drawOval(logoBoxRect, logoBgPaint)
 
-      val rawLogo = context.getDrawable(R.mipmap.ic_launcher)?.toBitmap()
+      val rawLogo = context.getDrawable(R.mipmap.web_note_icon)?.toBitmap()
       rawLogo?.let {
         val logoPaint = Paint().apply { isAntiAlias = true }
 

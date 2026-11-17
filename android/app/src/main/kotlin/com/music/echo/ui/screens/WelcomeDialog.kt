@@ -44,7 +44,7 @@ fun WelcomeDialog(onDismissRequest: () -> Unit) {
         verticalArrangement = Arrangement.Center,
       ) {
         AsyncImage(
-          model = R.mipmap.ic_launcher,
+          model = R.mipmap.web_note_icon,
           contentDescription = null,
           modifier = Modifier.size(96.dp).clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceContainer),

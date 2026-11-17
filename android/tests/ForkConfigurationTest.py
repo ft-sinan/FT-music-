@@ -673,6 +673,14 @@ class ForkConfigurationTest(unittest.TestCase):
                 adaptive = (MAIN / f"res/mipmap-anydpi-v26/{name}{suffix}.xml").read_text()
                 self.assertIn(f"@color/{name}_background", adaptive)
                 self.assertIn(f"@mipmap/{name}_foreground", adaptive)
+        # The community web note is the default icon: application tag, default alias and
+        # every surface that shows "the app icon" must point at it.
+        app_block = manifest.split("<application")[1].split(">")[0]
+        self.assertIn('android:icon="@mipmap/web_note_icon"', app_block)
+        default_block = manifest.split('android:name=".MainActivityAlias"')[1].split("</activity-alias>")[0]
+        self.assertIn('android:icon="@mipmap/web_note_icon"', default_block)
+        welcome = (MAIN / "kotlin/com/music/echo/ui/screens/WelcomeDialog.kt").read_text()
+        self.assertIn("R.mipmap.web_note_icon", welcome)
 
     def test_playback_artwork_is_requested_at_full_size(self):
         # Database rows may hold small thumbnail variants; everything that plays a song
