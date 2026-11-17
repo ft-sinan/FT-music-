@@ -116,7 +116,7 @@ fun NavGraphBuilder.navigationBuilder(
 
   composable("wrapped") { com.music.echo.ui.screens.wrapped.WrappedScreen(navController) }
   composable("podcast_video") {
-    com.music.echo.ui.screens.podcast.PodcastVideoScreen(navController)
+    echo.music.iad1tya.ui.screens.podcast.PodcastVideoScreen(navController)
   }
 
   composable("mood_and_genres") { MoodAndGenresScreen(navController, scrollBehavior) }
