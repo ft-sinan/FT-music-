@@ -343,6 +343,10 @@
     <string name="login">Login</string>
     <string name="logged_in_as">Signed in as %1$s</string>
     <string name="login_unverified">Signed in, but FT Music could not confirm your account details</string>
+    <string name="switch_accounts">Switch accounts</string>
+    <string name="remove_account">Remove account</string>
+    <string name="add_another_account">Add another account</string>
+    <string name="account_switched">Switched to %1$s</string>
     <string name="show_audio_quality_badge">Show Music Quality badge</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="login_failed">Login failed</string>

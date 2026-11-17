@@ -58,10 +58,14 @@ def labels(tree):
 def wait_for(label, timeout=120):
     end = time.monotonic() + timeout
     last = []
+    dumps_ok = 0
+    last_error = None
     launcher_recoveries = 0
     while time.monotonic() < end:
         try:
             tree = dump()
+            dumps_ok += 1
+            last_error = None
             last = labels(tree)
             if label in last:
                 return tree
@@ -76,10 +80,21 @@ def wait_for(label, timeout=120):
                     adb("shell", "input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
                     adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity", check=False)
                     launcher_recoveries += 1
-        except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
-            pass
+        except (RuntimeError, subprocess.CalledProcessError, ET.ParseError) as error:
+            last_error = error
         time.sleep(1)
-    raise AssertionError(f"Could not find {label!r}; visible labels: {last[:80]}")
+    # An empty label list is ambiguous: the screen may really have been blank, or every dump may
+    # have failed for the whole timeout. Those need different fixes, so say which one happened -
+    # an API 29 run reported "visible labels: []" for a dialog that was certainly on screen, and
+    # nothing in the message distinguished a blank screen from a dump that never worked.
+    if dumps_ok == 0:
+        raise AssertionError(
+            f"Could not find {label!r}: the UI dump never succeeded in {timeout}s "
+            f"(last error: {last_error!r})"
+        )
+    raise AssertionError(
+        f"Could not find {label!r} after {dumps_ok} successful dumps; visible labels: {last[:80]}"
+    )
 
 
 def tap(label):
