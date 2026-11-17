@@ -75,3 +75,24 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **Up to 320 kbps for every listener**
 
 - Stream selection no longer branches on sign-in: Auto and High ask YouTube for the best rung it will serve for anyone, up to 320 kbps. What actually plays is whatever YouTube returns, and the badge reports that real format.
+
+**Artwork is fetched at full size everywhere**
+
+- Songs played from your library used to carry whatever small thumbnail variant the database row held, so the notification, lock screen and widgets could show a soft picture while the player looked sharp. Playback metadata now always requests the large artwork variant, and album, online-playlist and local-playlist headers do the same.
+
+**The community web note is now the default icon**
+
+- Fresh installs and everyone on the standard icon now see the community mark re-themed as discussed: an open red spider web in fine lines on cream white, carrying three solid red sound arcs. A cocoa-brown twin ships as a selectable option, alongside the web note, the web badge and all earlier alternates; the welcome dialog and shared cards show the new mark too.
+
+**A premium minimal welcome card**
+
+- The first-launch card is now a dark, quiet surface with the community web note in a cream hairline frame, thin spider-web line art in two corners, one tagline and a single red action - no clutter, and all of its text is translatable.
+
+**Podcasts, complete**
+
+- Shows, episodes, follows, Continue listening and the Podcasts tab are joined by the playback half: episodes resume where you stopped, keep their own playback speed (cycle it from the player), get 15 s back / 30 s forward skip buttons, and a fullscreen landscape video player for video episodes.
+- Podcast streams never touch the streaming cache - a download is the only on-device copy of an episode - while ordinary songs keep the one-hour cache exactly as before.
+
+**FT Wrapped**
+
+- Your year in nine animated slides - totals, top songs and artists, listening persona and a shareable story card - under the FT name throughout.

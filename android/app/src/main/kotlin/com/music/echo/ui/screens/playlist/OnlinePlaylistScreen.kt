@@ -138,6 +138,7 @@ import echo.music.iad1tya.ui.menu.YouTubePlaylistMenu
 import echo.music.iad1tya.ui.menu.YouTubeSelectionSongMenu
 import echo.music.iad1tya.ui.menu.YouTubeSongMenu
 import echo.music.iad1tya.ui.utils.backToMain
+import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.listItemShape
 import echo.music.iad1tya.utils.rememberPreference
 import echo.music.iad1tya.viewmodels.OnlinePlaylistViewModel
@@ -607,7 +608,10 @@ private fun OnlinePlaylistHeader(
         contentAlignment = Alignment.Center
       ) {
         AsyncImage(
-          model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail).build(),
+          model =
+            ImageRequest.Builder(LocalContext.current)
+              .data(playlist.thumbnail?.resize(1200, 1200))
+              .build(),
           contentDescription = null,
           modifier =
             Modifier.then(

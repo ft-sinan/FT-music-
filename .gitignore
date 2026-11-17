@@ -34,3 +34,6 @@ android/app/google-services.json
 
 # Source art for generated launcher icons; only the density slices under res/ ship.
 art/
+
+# Local live preview of UI mockups (not app code).
+preview/

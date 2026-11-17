@@ -139,8 +139,8 @@ def main():
         if keep_data:
             wait_for("Account", timeout=90)
         else:
-            wait_for("Continue", timeout=90)
-            tap("Continue")
+            wait_for("Get started", timeout=90)
+            tap("Get started")
         open_local()
         wait_for("Scan device", timeout=60)
         tap("Scan device")

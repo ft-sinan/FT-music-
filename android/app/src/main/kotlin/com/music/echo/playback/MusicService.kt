@@ -595,6 +595,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   override fun onCreate() {
     super.onCreate()
     isRunning = true
+    startPodcastProgressPoll()
 
     // Workaround for ForegroundServiceStartNotAllowedException
     setListener(
@@ -2451,6 +2452,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     mediaItem: MediaItem?,
     reason: Int,
   ) {
+    handleEpisodeTransition()
     updateStreamingCacheProtection()
     cutoffGuard.onTrackChanged(mediaItem?.mediaId)
     val prevItem = trackedMediaItem
@@ -3330,30 +3332,61 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     }
   }
 
-  private fun createCacheDataSource(): CacheDataSource.Factory {
+  private fun createUpstreamFactory(): androidx.media3.datasource.DataSource.Factory {
     val useCronet = false
-
-    val upstreamFactory =
-      if (useCronet) {
-        try {
-          Timber.tag(TAG).d("Initializing CronetEngine for HTTP/3 QUIC streaming")
-          val cronetEngine =
-            CronetEngine.Builder(this).enableQuic(true).enableHttp2(true).enableBrotli(true).build()
-          CronetDataSource.Factory(
-            cronetEngine,
-            java.util.concurrent.Executors.newSingleThreadExecutor()
-          )
-        } catch (e: Exception) {
-          Timber.tag(TAG).e(e, "Failed to initialize Cronet, falling back to OkHttp")
-          com.music.echo.playback.ChunkedDataSource.Factory(createOkHttpFactory(), 1024 * 1024L)
-        }
-      } else {
+    return if (useCronet) {
+      try {
+        Timber.tag(TAG).d("Initializing CronetEngine for HTTP/3 QUIC streaming")
+        val cronetEngine =
+          CronetEngine.Builder(this).enableQuic(true).enableHttp2(true).enableBrotli(true).build()
+        CronetDataSource.Factory(
+          cronetEngine,
+          java.util.concurrent.Executors.newSingleThreadExecutor()
+        )
+      } catch (e: Exception) {
+        Timber.tag(TAG).e(e, "Failed to initialize Cronet, falling back to OkHttp")
         com.music.echo.playback.ChunkedDataSource.Factory(createOkHttpFactory(), 1024 * 1024L)
       }
+    } else {
+      com.music.echo.playback.ChunkedDataSource.Factory(createOkHttpFactory(), 1024 * 1024L)
+    }
+  }
 
+  /**
+   * Podcast episodes bypass both the streaming cache and the download cache unless the episode
+   * is an explicit download: a download is the only on-device copy of an episode. Everything
+   * else keeps the existing guarded cache chain.
+   */
+  private fun createPodcastAwareFactory(): androidx.media3.datasource.DataSource.Factory =
+    androidx.media3.datasource.DataSource.Factory {
+      val cached = createCacheDataSource().createDataSource()
+      val direct = createUpstreamFactory().createDataSource()
+      object : androidx.media3.datasource.DataSource {
+        private var active: androidx.media3.datasource.DataSource? = null
+        private fun current() = active ?: cached
+        override fun open(dataSpec: androidx.media3.datasource.DataSpec): Long {
+          val src = if (dataSpec.key?.let(PodcastStreamPolicy::neverCache) == true) direct else cached
+          active = src
+          return src.open(dataSpec)
+        }
+        override fun read(buffer: ByteArray, offset: Int, length: Int) =
+          current().read(buffer, offset, length)
+        override fun getUri() = current().uri
+        override fun getResponseHeaders() = current().responseHeaders
+        override fun close() = current().close()
+        override fun addTransferListener(
+          transferListener: androidx.media3.datasource.TransferListener
+        ) {
+          cached.addTransferListener(transferListener)
+          direct.addTransferListener(transferListener)
+        }
+      }
+    }
+
+  private fun createCacheDataSource(): CacheDataSource.Factory {
     val temporaryCacheFactory = CacheDataSource.Factory()
       .setCache(playerCache)
-      .setUpstreamDataSourceFactory(upstreamFactory)
+      .setUpstreamDataSourceFactory(createUpstreamFactory())
     return CacheDataSource.Factory()
       .setCache(downloadCache)
       .setUpstreamDataSourceFactory(
@@ -3538,7 +3571,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   }
 
   private fun createDataSourceFactory(): DataSource.Factory {
-    return ResolvingDataSource.Factory(DefaultDataSource.Factory(this, createCacheDataSource())) {
+    return ResolvingDataSource.Factory(DefaultDataSource.Factory(this, createPodcastAwareFactory())) {
       dataSpec ->
       val mediaId = dataSpec.key ?: error("No media id")
       // Exo may open current, prebuffered and crossfading tracks concurrently.
@@ -5182,6 +5215,50 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
           ?: 0L
 
       updateListenBrainz(title, artistNames, releaseName, durationMs, isFinished = false)
+    }
+  }
+
+  /** Podcast episodes resume where they stopped and play at the podcast speed. */
+  private fun handleEpisodeTransition() {
+    val meta = player.currentMediaItem?.metadata ?: return
+    val durationMs =
+      player.duration.takeIf { it > 0 } ?: (meta.duration.takeIf { it > 0 }?.times(1000L) ?: 0L)
+    if (!echo.music.iad1tya.utils.PodcastProgress.isEpisode(meta, durationMs)) {
+      if (player.playbackParameters.speed != 1f) player.setPlaybackSpeed(1f)
+      return
+    }
+    PodcastStreamPolicy.noteEpisode(meta.id)
+    echo.music.iad1tya.utils.PodcastProgress.restore(meta.id)
+    echo.music.iad1tya.utils.PodcastProgress.get(meta.id)?.let { entry ->
+      if (!entry.finished && entry.positionMs > 0 &&
+          player.currentPosition < echo.music.iad1tya.utils.PodcastProgress.MIN_POSITION_MS) {
+        player.seekTo(entry.positionMs)
+      }
+    }
+    player.setPlaybackSpeed(echo.music.iad1tya.utils.PodcastProgress.speed.value)
+  }
+
+  private fun startPodcastProgressPoll() {
+    scope.launch {
+      while (isActive) {
+        delay(5_000)
+        if (player.isPlaying) {
+          val meta = player.currentMediaItem?.metadata ?: continue
+          val dur = player.duration.coerceAtLeast(0L)
+          if (echo.music.iad1tya.utils.PodcastProgress.isEpisode(meta, dur)) {
+            echo.music.iad1tya.utils.PodcastProgress.update(meta, player.currentPosition, dur)
+          }
+        }
+      }
+    }
+    scope.launch {
+      echo.music.iad1tya.utils.PodcastProgress.speed.collect { speed ->
+        val meta = player.currentMediaItem?.metadata
+        val dur = player.duration.coerceAtLeast(0L)
+        if (meta != null && echo.music.iad1tya.utils.PodcastProgress.isEpisode(meta, dur)) {
+          player.setPlaybackSpeed(speed)
+        }
+      }
     }
   }
 }

@@ -153,6 +153,7 @@ import echo.music.iad1tya.ui.menu.SelectionSongMenu
 import echo.music.iad1tya.ui.menu.SongMenu
 import echo.music.iad1tya.ui.screens.settings.DarkMode
 import echo.music.iad1tya.ui.utils.backToMain
+import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.launchSafely
 import echo.music.iad1tya.utils.listItemShape
 import echo.music.iad1tya.utils.makeTimeString
@@ -1153,7 +1154,7 @@ fun LocalPlaylistHeader(
                 )
                 .fastForEachIndexed { index, alignment ->
                   AsyncImage(
-                    model = playlist.thumbnails.getOrNull(index),
+                    model = playlist.thumbnails.getOrNull(index)?.resize(544, 544),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.align(alignment).fillMaxSize(0.5f)
