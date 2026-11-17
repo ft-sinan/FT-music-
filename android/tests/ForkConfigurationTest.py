@@ -674,6 +674,14 @@ class ForkConfigurationTest(unittest.TestCase):
                 self.assertIn(f"@color/{name}_background", adaptive)
                 self.assertIn(f"@mipmap/{name}_foreground", adaptive)
 
+    def test_playback_artwork_is_requested_at_full_size(self):
+        # Database rows may hold small thumbnail variants; everything that plays a song
+        # (player, notification, lock screen, widgets) must still ask for the large one.
+        mappers = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/models/MediaMetadataMappers.kt").read_text()
+        self.assertIn("song.thumbnailUrl?.resize(1200, 1200)", mappers)
+        resize = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/ui/utils/YouTubeUtils.kt").read_text()
+        self.assertIn("1200", resize)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

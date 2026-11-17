@@ -75,3 +75,7 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **Up to 320 kbps for every listener**
 
 - Stream selection no longer branches on sign-in: Auto and High ask YouTube for the best rung it will serve for anyone, up to 320 kbps. What actually plays is whatever YouTube returns, and the badge reports that real format.
+
+**Artwork is fetched at full size everywhere**
+
+- Songs played from your library used to carry whatever small thumbnail variant the database row held, so the notification, lock screen and widgets could show a soft picture while the player looked sharp. Playback metadata now always requests the large artwork variant, and album, online-playlist and local-playlist headers do the same.

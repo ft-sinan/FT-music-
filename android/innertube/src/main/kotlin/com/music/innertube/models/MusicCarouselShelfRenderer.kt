@@ -25,6 +25,7 @@ data class MusicCarouselShelfRenderer(
   @Serializable
   data class Content(
     val musicTwoRowItemRenderer: MusicTwoRowItemRenderer?,
+    val musicMultiRowListItemRenderer: MusicMultiRowListItemRenderer? = null, // podcast episode
     val musicResponsiveListItemRenderer: MusicResponsiveListItemRenderer?,
     val musicNavigationButtonRenderer:
       MusicNavigationButtonRenderer?, // navigation button in explore tab

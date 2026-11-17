@@ -106,6 +106,7 @@ import echo.music.iad1tya.ui.menu.SongMenu
 import echo.music.iad1tya.ui.menu.YouTubeAlbumMenu
 import echo.music.iad1tya.ui.player.CanvasArtworkPlayer
 import echo.music.iad1tya.ui.utils.backToMain
+import echo.music.iad1tya.ui.utils.resize
 import echo.music.iad1tya.utils.listItemShape
 import echo.music.iad1tya.utils.rememberPreference
 import echo.music.iad1tya.viewmodels.AlbumViewModel
@@ -248,7 +249,7 @@ fun AlbumScreen(
           Box(modifier = Modifier.matchParentSize().offset { IntOffset(x = 0, y = headerOffset) }) {
             Box(modifier = Modifier.fillMaxSize()) {
               AsyncImage(
-                model = albumWithSongs.album.thumbnailUrl,
+                model = albumWithSongs.album.thumbnailUrl?.resize(1200, 1200),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

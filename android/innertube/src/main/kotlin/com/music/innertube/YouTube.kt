@@ -20,6 +20,7 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.models.TasteSignals
 import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
+import com.music.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_PODCAST_EPISODE
 import com.music.innertube.models.YTItem
 import com.music.innertube.models.YouTubeClient
 import com.music.innertube.models.YouTubeClient.Companion.WEB
@@ -61,6 +62,7 @@ import com.music.innertube.pages.NextPage
 import com.music.innertube.pages.NextResult
 import com.music.innertube.pages.PlaylistContinuationPage
 import com.music.innertube.pages.PlaylistPage
+import com.music.innertube.pages.PodcastPage
 import com.music.innertube.pages.RelatedPage
 import com.music.innertube.pages.SearchPage
 import com.music.innertube.pages.SearchResult
@@ -237,9 +239,15 @@ object YouTube {
       groupedSummaries.add(SearchSummary(title = "Songs", items = flatSongs))
     }
 
-    val flatVideos = flatItems.filterIsInstance<SongItem>().filter { it.isVideoSong }
+    val flatVideos =
+      flatItems.filterIsInstance<SongItem>().filter { it.isVideoSong && !it.isPodcastEpisode }
     if (flatVideos.isNotEmpty()) {
       groupedSummaries.add(SearchSummary(title = "Videos", items = flatVideos))
+    }
+
+    val flatEpisodes = flatItems.filterIsInstance<SongItem>().filter { it.isPodcastEpisode }
+    if (flatEpisodes.isNotEmpty()) {
+      groupedSummaries.add(SearchSummary(title = "Episodes", items = flatEpisodes))
     }
 
     val flatAlbums = flatItems.filterIsInstance<AlbumItem>()
@@ -869,6 +877,32 @@ object YouTube {
       base?.musicResponsiveHeaderRenderer
         ?: base?.musicEditablePlaylistDetailHeaderRenderer?.header?.musicResponsiveHeaderRenderer
 
+    // Podcast shows answer VL browses without a header, or as a plain playlist of every
+    // upload (clips included, in upload-list order). Their own MPSP page has the show's
+    // details and only its episodes, newest first.
+    val vlItems =
+      response.contents
+        ?.twoColumnBrowseResultsRenderer
+        ?.secondaryContents
+        ?.sectionListRenderer
+        ?.contents
+        ?.firstOrNull()
+        ?.let {
+          it.musicPlaylistShelfRenderer?.contents?.getItems()
+            ?: it.musicShelfRenderer?.contents?.getItems()
+        }
+        .orEmpty()
+    // Unavailable uploads carry no type, so only typed items decide.
+    val isPodcastPlaylist =
+      vlItems.mapNotNull { it.musicVideoType }.let { types ->
+        types.isNotEmpty() && types.all { it == MUSIC_VIDEO_TYPE_PODCAST_EPISODE }
+      }
+    if (header == null || isPodcastPlaylist) {
+      podcast(playlistId).getOrNull()?.takeIf { it.songs.isNotEmpty() }?.let {
+        return@runCatching it
+      }
+    }
+
     val editable = base?.musicEditablePlaylistDetailHeaderRenderer != null
     val secondarySectionList =
       response.contents?.twoColumnBrowseResultsRenderer?.secondaryContents?.sectionListRenderer
@@ -963,6 +997,63 @@ object YouTube {
     )
   }
 
+  /** A podcast show page; [showId] is the show's playlist id (without the `MPSP` prefix). */
+  suspend fun podcast(showId: String): Result<PlaylistPage> = runCatching {
+    val response =
+      innerTube
+        .browse(
+          client = WEB_REMIX,
+          browseId = PodcastPage.showBrowseId(showId),
+          setLogin = true,
+        )
+        .body<BrowseResponse>()
+    val header =
+      response.contents
+        ?.twoColumnBrowseResultsRenderer
+        ?.tabs
+        ?.firstOrNull()
+        ?.tabRenderer
+        ?.content
+        ?.sectionListRenderer
+        ?.contents
+        ?.firstOrNull()
+        ?.musicResponsiveHeaderRenderer
+    val shelf =
+      response.contents
+        ?.twoColumnBrowseResultsRenderer
+        ?.secondaryContents
+        ?.sectionListRenderer
+        ?.contents
+        ?.firstOrNull()
+        ?.musicShelfRenderer
+    val title = header?.title?.runs?.firstOrNull()?.text?.let(ApiText::clean) ?: ""
+    val show = Artist(name = title, id = PodcastPage.showBrowseId(showId))
+    PlaylistPage(
+      playlist =
+        PlaylistItem(
+          id = showId,
+          title = title,
+          author =
+            header?.straplineTextOne?.runs?.firstOrNull()?.let {
+              Artist(name = ApiText.clean(it.text), id = it.navigationEndpoint?.browseEndpoint?.browseId)
+            },
+          songCountText = null,
+          thumbnail =
+            header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.lastOrNull()?.url,
+          playEndpoint = null,
+          shuffleEndpoint = null,
+          radioEndpoint = null,
+          isPodcast = true,
+        ),
+      songs =
+        shelf?.contents.orEmpty().mapNotNull { content ->
+          content.musicMultiRowListItemRenderer?.let { PodcastPage.episode(it, show) }
+        },
+      songsContinuation = shelf?.continuations?.getContinuation(),
+      continuation = null,
+    )
+  }
+
   private fun parseRelatedItems(contents: List<SectionListRenderer.Content>): List<YTItem> {
     return contents
       .mapNotNull { content ->
@@ -999,7 +1090,11 @@ object YouTube {
           ?.continuationItems
           .orEmpty()
 
-      val allContents = mainContents + shelfContents + appendedContents
+      // Podcast show pages continue with a plain shelf of episode rows.
+      val episodeContents: List<MusicShelfRenderer.Content> =
+        response.continuationContents?.musicShelfContinuation?.contents ?: emptyList()
+
+      val allContents = mainContents + shelfContents + appendedContents + episodeContents
 
       val songs =
         allContents

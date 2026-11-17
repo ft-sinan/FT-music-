@@ -28,7 +28,10 @@ fun Song.toMediaMetadata() =
     title = song.title,
     artists = artists.map { MediaMetadata.Artist(id = it.id, name = it.name) },
     duration = song.duration,
-    thumbnailUrl = song.thumbnailUrl,
+    // Rows in the database may still carry whatever small variant an older build or a list
+    // parser stored. Everything that plays a song - player, notification, lock screen,
+    // widgets - reads artwork through this mapper, so ask for the large variant here.
+    thumbnailUrl = song.thumbnailUrl?.resize(1200, 1200),
     album =
       album?.let { MediaMetadata.Album(id = it.id, title = it.title) }
         ?: song.albumId?.let { albumId ->

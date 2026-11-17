@@ -58,6 +58,11 @@
     <string name="filter_artists">Artists</string>
     <string name="filter_local">Local</string>
     <string name="filter_playlists">Playlists</string>
+    <string name="filter_podcasts">Podcasts</string>
+    <string name="your_podcasts">Your podcasts</string>
+    <string name="new_episodes">New episodes</string>
+    <string name="podcast">Podcast</string>
+    <string name="library_podcast_empty">Podcasts you follow appear here</string>
     <string name="filter_community_playlists">Community playlists</string>
     <string name="filter_featured_playlists">Featured playlists</string>
     <string name="filter_bookmarked">Bookmarked</string>
