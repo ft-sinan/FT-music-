@@ -37,7 +37,7 @@ class OpusRepublisherTest {
   fun oggMagicIsRecognisedAndWebmIsNot() {
     val dir = File(System.getProperty("java.io.tmpdir"), "ft-opus-repub-test").apply { mkdirs() }
     val ogg = File(dir, "a.opus").apply { writeBytes("OggS".toByteArray(Charsets.US_ASCII) + ByteArray(4)) }
-    val webm = File(dir, "b.webm").apply { writeBytes(byteArrayOf(0x1A, 0x45, 0xDF, 0xA3, 0, 0)) }
+    val webm = File(dir, "b.webm").apply { writeBytes(byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte(), 0, 0)) }
     val empty = File(dir, "c.opus").apply { writeBytes(ByteArray(0)) }
     assertTrue(OpusRepublisher.looksLikeOgg(ogg))
     assertFalse(OpusRepublisher.looksLikeOgg(webm))
