@@ -401,6 +401,34 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityWebNote"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/web_note_icon"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/web_note_icon_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityWebBadge"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/web_badge_icon"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/web_badge_icon_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.FileProvider"

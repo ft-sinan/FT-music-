@@ -648,6 +648,32 @@ class ForkConfigurationTest(unittest.TestCase):
         # No listener is capped below the best rung YouTube will serve.
         self.assertNotIn("coerceAtMost(160)", player)
 
+    def test_community_web_icons_are_wired_like_the_other_alternates(self):
+        manifest = (MAIN / "AndroidManifest.xml").read_text()
+        icons = (MAIN / "kotlin/com/music/echo/utils/IconUtils.kt").read_text()
+        screen = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AppIconSettingsScreen.kt").read_text()
+        densities = (("ldpi", 36), ("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192))
+        for name, alias, enum in (
+            ("web_note_icon", "MainActivityWebNote", "WEB_NOTE(18)"),
+            ("web_badge_icon", "MainActivityWebBadge", "WEB_BADGE(19)"),
+        ):
+            self.assertIn(f'android:name=".{alias}"', manifest)
+            self.assertIn(f'android:icon="@mipmap/{name}"', manifest)
+            block = manifest.split(f'android:name=".{alias}"')[1].split("</activity-alias>")[0]
+            self.assertIn('android:enabled="false"', block)
+            self.assertIn(f'ComponentName(context, "echo.music.iad1tya.{alias}")', icons)
+            self.assertIn(enum, icons)
+            self.assertIn(f"R.mipmap.{name}", screen)
+            for density, _ in densities:
+                self.assertTrue((MAIN / f"res/mipmap-{density}/{name}.png").is_file(), density)
+                self.assertTrue((MAIN / f"res/mipmap-{density}/{name}_round.png").is_file(), density)
+            for density in ("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"):
+                self.assertTrue((MAIN / f"res/mipmap-{density}/{name}_foreground.png").is_file(), density)
+            for suffix in ("", "_round"):
+                adaptive = (MAIN / f"res/mipmap-anydpi-v26/{name}{suffix}.xml").read_text()
+                self.assertIn(f"@color/{name}_background", adaptive)
+                self.assertIn(f"@mipmap/{name}_foreground", adaptive)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):
