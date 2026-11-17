@@ -3386,7 +3386,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
   private fun createCacheDataSource(): CacheDataSource.Factory {
     val temporaryCacheFactory = CacheDataSource.Factory()
       .setCache(playerCache)
-      .setUpstreamDataSourceFactory(upstreamFactory)
+      .setUpstreamDataSourceFactory(createUpstreamFactory())
     return CacheDataSource.Factory()
       .setCache(downloadCache)
       .setUpstreamDataSourceFactory(
@@ -5224,7 +5224,7 @@ class MusicService : MediaLibraryService(), Player.Listener, PlaybackStatsListen
     val durationMs =
       player.duration.takeIf { it > 0 } ?: (meta.duration.takeIf { it > 0 }?.times(1000L) ?: 0L)
     if (!echo.music.iad1tya.utils.PodcastProgress.isEpisode(meta, durationMs)) {
-      if (player.playbackSpeed != 1f) player.setPlaybackSpeed(1f)
+      if (player.playbackParameters.speed != 1f) player.setPlaybackSpeed(1f)
       return
     }
     PodcastStreamPolicy.noteEpisode(meta.id)

@@ -1715,6 +1715,7 @@ fun AppearanceSettings(
                   LibraryFilter.PLAYLISTS -> stringResource(R.string.playlists)
                   LibraryFilter.LIBRARY -> stringResource(R.string.filter_library)
                   LibraryFilter.LOCAL -> stringResource(R.string.filter_local)
+                  LibraryFilter.PODCASTS -> stringResource(R.string.filter_podcasts)
                   LibraryFilter.SPOTIFY -> "Spotify"
                 }
               )

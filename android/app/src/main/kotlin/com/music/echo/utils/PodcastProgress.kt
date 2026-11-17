@@ -56,7 +56,7 @@ data class EpisodeProgress(
 object PodcastProgress {
   private const val PREFS_NAME = "podcast_progress"
   /** Positions this early are not worth resuming. */
-  private const val MIN_POSITION_MS = 30_000L
+  const val MIN_POSITION_MS = 30_000L
   /** Closer than 5% of its length to the end (1 to 3 minutes) counts as played. */
   private const val END_MARGIN_MIN_MS = 60_000L
   private const val END_MARGIN_MAX_MS = 180_000L
