@@ -15,6 +15,19 @@ object SharedDownloadNames {
     else -> null
   }
 
+  /**
+   * Opus audio inside WebM is scanned as `video/webm` by Android, so a published copy of a
+   * pure-audio song would be filed under Videos by every file manager. Those downloads are
+   * republished in an Ogg container instead; see [OpusRepublisher].
+   */
+  fun isWebmAudio(mimeType: String): Boolean {
+    val bare = mimeType.substringBefore(';').trim().lowercase(Locale.ROOT)
+    return bare == "audio/webm" || bare == "video/webm"
+  }
+
+  const val OPUS_EXTENSION = "opus"
+  const val OPUS_MIME_TYPE = "audio/ogg"
+
   fun fileName(id: String, title: String, artist: String, extension: String): String {
     val rawLabel = listOf(artist, title).filter { it.isNotBlank() }.joinToString(" - ")
       .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")

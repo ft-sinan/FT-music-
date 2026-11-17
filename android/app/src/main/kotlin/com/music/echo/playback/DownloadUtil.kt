@@ -121,7 +121,21 @@ constructor(
         val timestamp = current!!.updateTimeMs.takeIf { it > 0 } ?: System.currentTimeMillis()
         LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC)
       } else null
-      database.updateDownloadedInfo(id, isComplete, date)
+      if (!isComplete) {
+        database.updateDownloadedInfo(id, false, null)
+        return@withLock
+      }
+      // A completed download must be listed even when the song row is missing - requested from a
+      // context that never inserted one, or deleted since. Insert first and update on conflict,
+      // in one transaction, so the flag and the download date can never disagree.
+      val completed = requireNotNull(current)
+      database.withTransaction {
+        val title = String(completed.request.data, Charsets.UTF_8).ifBlank { "Unknown" }
+        val rowId = database.insert(
+          SongEntity(id = id, title = title, dateDownload = date, isDownloaded = true)
+        )
+        if (rowId == -1L) database.updateDownloadedInfo(id, true, date)
+      }
     }
   }
 
@@ -350,7 +364,9 @@ constructor(
         val updatedSong =
           if (existing != null) {
             existing.copy(
-              dateDownload = existing.dateDownload ?: now,
+              // The download date is stamped when a download completes (syncDownloadedFlag),
+              // never when it is requested: a stalled or failed download must not look
+              // available offline, and must not sort into the Cached list by a bogus date.
               thumbnailUrl =
                 existing.thumbnailUrl
                   ?: playbackData.videoDetails
@@ -372,7 +388,7 @@ constructor(
                   ?.lastOrNull()
                   ?.url
                   ?.resize(1200, 1200),
-              dateDownload = now,
+              dateDownload = null,
               isDownloaded = false
             )
           }

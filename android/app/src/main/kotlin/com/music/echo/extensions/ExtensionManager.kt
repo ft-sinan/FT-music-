@@ -53,7 +53,10 @@ data class AddonStreamResponse(
     val quality: String = "",
     val streamQuality: String = "",
     val audioQuality: String = "",
-    val codec: String? = null
+    val codec: String? = null,
+    /** Real bitrate in bit/s when the addon knows it; null means "unknown", never a guess. */
+    val bitrate: Int? = null,
+    val sampleRate: Int? = null
 )
 
 @Serializable

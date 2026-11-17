@@ -1,6 +1,6 @@
 ## FT Music v0.8.1
 
-A fix release. Two things were wrong in v0.8.0, both of which are now fixed, and nothing else changed.
+A fix release with a few corrections. Two things were wrong in v0.8.0 and both are fixed; downloaded songs also stop masquerading as video files, download lists recover on their own, and the quality badge no longer repeats a made-up bitrate for replayed or addon streams.
 
 This Android release is a modified fork of [Echo Music](https://github.com/EchoMusicApp/Echo-Music), based on upstream commit `c0de840532aadc36a84475b63291fbc6452a1668`. Source and changes are available under GPLv3; see `android/LICENSE` and `android/UPSTREAM.md` for the license and attribution. FT Music is not affiliated with Echo Music.
 
@@ -52,3 +52,25 @@ YouTube account sync is unchanged. With sync enabled, actions in FT Music can al
 If you are on v0.8.0, this is the **first update you can install from inside the app**: **Settings → App updates → Check for updates**. It will pick the right APK for your phone, check it against the published SHA-256 and FT Music's signing certificate, and then hand it to Android, which still asks you to confirm. If you are on v0.6.0 or earlier, the app cannot update itself yet, so download an APK from this release page and install it over the top.
 
 There is no v0.7.0 — the version number skips it, because the work that was going to be v0.7.0 shipped in v0.8.0 instead.
+
+### What is new
+
+**Downloaded songs are filed as audio, not as videos**
+
+- YouTube's best audio is Opus inside a WebM container. Android names a file's type from its extension, and `.webm` means video - so a pure-audio download appeared in every file manager's Videos list behind a video icon, even though it was only sound.
+- New downloads that carry Opus in WebM are now published to `Downloads/FT Music` in an Ogg container (`.opus`): the same audio packets, copied stream-for-stream with no decode and no re-encode, so the quality is unchanged bit-for-bit. File managers file `.opus` under audio. If the container swap cannot run or fails on a device, the download is published exactly as before rather than not at all.
+- Downloads already published as `.webm` are left untouched.
+
+**The quality badge reports the stream that is actually playing**
+
+- Replaying an already-resolved stream (a zero-network cache hit) reused a stand-in format that claimed 160 kbps WebM at 48 kHz whatever the real stream was. A resolved stream now carries its real bitrate, container and sample rate, and everything downstream reads those.
+- Addon (extension) streams may report their real bitrate and sample rate; when an addon does not know them, the badge leaves the number out instead of showing a guess.
+
+**Download lists stay correct on their own**
+
+- A download's date is now stamped when the download completes. A request that stalled or failed no longer leaves a song looking available offline under a bogus date in the Cached list.
+- If a download completes while its library row is missing, the row is created as part of the same transaction that marks it downloaded, so a completed download can no longer be invisible in Downloaded lists.
+
+**Up to 320 kbps for every listener**
+
+- Stream selection no longer branches on sign-in: Auto and High ask YouTube for the best rung it will serve for anyone, up to 320 kbps. What actually plays is whatever YouTube returns, and the badge reports that real format.

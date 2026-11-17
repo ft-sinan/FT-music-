@@ -615,6 +615,31 @@ class ForkConfigurationTest(unittest.TestCase):
             for name in ("switch_accounts", "remove_account", "add_another_account", "account_switched"):
                 self.assertIn(f'name="{name}"', local)
 
+    def test_opus_downloads_are_republished_as_audio_not_video(self):
+        playback = APP / "src/main/kotlin/com/music/echo/playback"
+        store = (playback / "SharedDownloadStore.kt").read_text()
+        republisher = (playback / "OpusRepublisher.kt").read_text()
+        service = (playback / "MusicService.kt").read_text()
+        downloads = (playback / "DownloadUtil.kt").read_text()
+        player = (APP / "src/main/kotlin/com/music/echo/utils/YTPlayerUtils.kt").read_text()
+        # The publish path remuxes Opus/WebM into Ogg instead of leaving a video-typed file.
+        self.assertIn("SharedDownloadNames.isWebmAudio(mime)", store)
+        self.assertIn("OpusRepublisher.remux(input, output)", store)
+        self.assertIn("SharedDownloadNames.OPUS_EXTENSION", store)
+        self.assertIn("SharedDownloadNames.OPUS_MIME_TYPE", store)
+        # A stream copy, handed over as an argument array: never transcoded, never shell-parsed.
+        self.assertIn('listOf("-hide_banner", "-i", input, "-c", "copy", output)', republisher)
+        self.assertIn("executeWithArgumentsAsync", republisher)
+        self.assertNotIn("FFmpegKit.execute(", republisher)
+        # The badge can no longer be fed a made-up bitrate for replayed or addon streams.
+        self.assertNotIn("bitrate = 160000", service)
+        self.assertNotIn("bitrate = if (flac) 1411000 else 320000", service)
+        # The download date is stamped on completion, atomically, even without a song row.
+        self.assertNotIn("dateDownload = existing.dateDownload ?: now", downloads)
+        self.assertIn("if (rowId == -1L) database.updateDownloadedInfo(id, true, date)", downloads)
+        # No listener is capped below the best rung YouTube will serve.
+        self.assertNotIn("coerceAtMost(160)", player)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

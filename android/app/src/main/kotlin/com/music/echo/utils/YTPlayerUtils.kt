@@ -231,12 +231,9 @@ object YTPlayerUtils {
     audioQuality: AudioQuality,
     connectivityManager: ConnectivityManager,
   ): Result<PlaybackData> = runCatching {
-    val isLoggedIn = !com.music.innertube.YouTube.cookie.isNullOrBlank()
-    val targetMaxKbps = if (isLoggedIn || audioQuality.permitsHigh()) {
-      audioQuality.maxKbps.coerceAtMost(320)
-    } else {
-      audioQuality.maxKbps.coerceAtMost(160)
-    }
+    // Every listener may ask for the best rung YouTube will serve; what actually plays is
+    // whatever the server returns for it, and the quality badge reports that real format.
+    val targetMaxKbps = audioQuality.maxKbps.coerceAtMost(320)
     val extracted =
       echo.music.iad1tya.utils.InnerTubeXResolver.extract(
         videoId = videoId,
