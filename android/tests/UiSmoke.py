@@ -123,13 +123,13 @@ def main():
     adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS", check=False)
     try:
         adb("shell", "am", "start", "-W", "-n", PACKAGE + "/echo.music.iad1tya.MainActivity")
-        welcome = wait_for("Continue")
+        welcome = wait_for("Get started")
         if "Welcome to FT Music" not in labels(welcome):
             raise AssertionError(f"FT Music welcome not visible: {labels(welcome)}")
         if any("Support upstream" in value or "Patreon" in value for value in labels(welcome)):
             raise AssertionError("Upstream donation prompt unexpectedly shown on welcome screen")
         capture("welcome")
-        tap("Continue")
+        tap("Get started")
         wait_for("Account")
         capture("home")
         tap("Account")

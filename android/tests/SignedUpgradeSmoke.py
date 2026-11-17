@@ -39,8 +39,8 @@ def enter_home():
     while time.monotonic() < end:
         try:
             last = labels(dump())
-            if "Continue" in last:
-                tap("Continue")
+            if "Get started" in last:
+                tap("Get started")
             elif "Account" in last:
                 return
         except (RuntimeError, subprocess.CalledProcessError, ET.ParseError):
@@ -74,8 +74,8 @@ def main():
             adb("shell", "pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS", check=False)
         assert_version(5000)
         launch()
-        wait_for("Continue", timeout=120)
-        tap("Continue")
+        wait_for("Get started", timeout=120)
+        tap("Get started")
         wait_for("Account", timeout=120)
         adb("shell", "am", "force-stop", PACKAGE)
         adb("root")
