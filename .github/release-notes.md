@@ -82,7 +82,7 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 
 **The community web note is now the default icon**
 
-- Fresh installs and everyone on the standard icon now see the community mark on red: a spider-web badge carrying three cream sound-wave lines, drawn as original art (the web's own spokes cross the lines). The earlier web note and the web badge remain selectable in Settings → App icon, with all earlier alternates; the welcome dialog and shared cards show the new mark too.
+- Fresh installs and everyone on the standard icon now see the community mark re-themed as discussed: an open red spider web in fine lines on cream white, carrying three solid red sound arcs. A cocoa-brown twin ships as a selectable option, alongside the web note, the web badge and all earlier alternates; the welcome dialog and shared cards show the new mark too.
 
 **A premium minimal welcome card**
 

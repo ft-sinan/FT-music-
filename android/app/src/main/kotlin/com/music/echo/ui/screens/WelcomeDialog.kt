@@ -106,7 +106,7 @@ fun WelcomeDialog(onDismissRequest: () -> Unit) {
           verticalArrangement = Arrangement.Center,
         ) {
           AsyncImage(
-            model = R.mipmap.web_lines_icon,
+            model = R.mipmap.web_arcs_icon,
             contentDescription = null,
             modifier =
               Modifier.size(88.dp)

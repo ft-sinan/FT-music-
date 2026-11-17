@@ -19,7 +19,8 @@ enum class AppIconType(val value: Int) {
   CRAFT(16),
   SADIE(17),
   WEB_NOTE(18),
-  WEB_BADGE(19)
+  WEB_BADGE(19),
+  WEB_COCOA(20)
 }
 
 object IconUtils {
@@ -41,6 +42,7 @@ object IconUtils {
     val sadie = ComponentName(context, "echo.music.iad1tya.MainActivitySadie")
     val webNote = ComponentName(context, "echo.music.iad1tya.MainActivityWebNote")
     val webBadge = ComponentName(context, "echo.music.iad1tya.MainActivityWebBadge")
+    val webCocoa = ComponentName(context, "echo.music.iad1tya.MainActivityWebCocoa")
 
     pm.setComponentEnabledSetting(
       dynamic,
@@ -130,6 +132,12 @@ object IconUtils {
     pm.setComponentEnabledSetting(
       webBadge,
       if (iconType == AppIconType.WEB_BADGE) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+      else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+      PackageManager.DONT_KILL_APP
+    )
+    pm.setComponentEnabledSetting(
+      webCocoa,
+      if (iconType == AppIconType.WEB_COCOA) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
       else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
       PackageManager.DONT_KILL_APP
     )
