@@ -169,7 +169,7 @@ fun AccountSettingsScreen(
       if (savedAccounts.isNotEmpty()) {
         Material3SettingsGroup(
           scrollState = scrollState,
-          title = "Switch Accounts",
+          title = stringResource(R.string.switch_accounts),
           items =
             savedAccounts.map { account ->
               Material3SettingsItem(
@@ -210,7 +210,7 @@ fun AccountSettingsScreen(
                         onSavedAccountsJsonChange(Json.encodeToString(mutableAccounts))
                       }
                     ) {
-                      Icon(painterResource(R.drawable.close), contentDescription = "Remove Account")
+                      Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.remove_account))
                     }
                   } else {
                     OutlinedButton(
@@ -227,7 +227,7 @@ fun AccountSettingsScreen(
                 },
                 onClick = {
                   if (account.cookie != innerTubeCookie) {
-                    accountSettingsViewModel.saveTokenAndRestart(
+                    accountSettingsViewModel.switchAccount(
                       context = context,
                       cookie = account.cookie,
                       visitorData = account.visitorData,
@@ -243,7 +243,7 @@ fun AccountSettingsScreen(
               listOf(
                 Material3SettingsItem(
                   icon = painterResource(R.drawable.add),
-                  title = { Text("Add another account") },
+                  title = { Text(stringResource(R.string.add_another_account)) },
                   onClick = { navController.navigate("login") }
                 )
               )
@@ -299,7 +299,7 @@ fun AccountSettingsScreen(
                 listOf(
                   Material3SettingsItem(
                     icon = painterResource(R.drawable.add),
-                    title = { Text("Add another account") },
+                    title = { Text(stringResource(R.string.add_another_account)) },
                     onClick = { navController.navigate("login") }
                   )
                 )
@@ -533,7 +533,7 @@ fun AccountSettingsScreen(
                 accountChannelHandleValue = it.substringAfter("=")
             }
           }
-          accountSettingsViewModel.saveTokenAndRestart(
+          accountSettingsViewModel.switchAccount(
             context = context,
             cookie = cookie,
             visitorData = visitorDataValue,

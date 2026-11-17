@@ -566,6 +566,55 @@ class ForkConfigurationTest(unittest.TestCase):
         # No upstream branding in the sign-in flow.
         self.assertNotIn("Echo", login + hosts)
 
+    def test_switching_accounts_does_not_kill_the_app(self):
+        """Choosing another saved account may not stop playback or destroy the queue.
+
+        The app already watches the preferences this writes: App.observeSettingsChanges collects the
+        cookie, visitor data and data sync id onto the live YouTube session, and HomeViewModel
+        collects the cookie to clear the previous account's carousels and playlists and reload them,
+        discarding results that came back under the old cookie. Logout has always worked through
+        those same collectors without a restart, so switching did not need one either - it relaunched
+        the activity and killed the process anyway.
+        """
+        vm_file = (MAIN / "kotlin/com/music/echo/viewmodels/AccountSettingsViewModel.kt").read_text()
+        # Judged on the code, so the KDoc explaining what was removed cannot read as still there.
+        vm = re.sub(r"/[*].*?[*]/", "", vm_file, flags=re.S)
+        screen = (MAIN / "kotlin/com/music/echo/ui/screens/settings/AccountSettingsScreen.kt").read_text()
+        strings = (MAIN / "res/values/strings.xml").read_text()
+
+        self.assertIn("fun switchAccount(", vm)
+        self.assertNotIn("saveTokenAndRestart", vm + screen)
+        self.assertNotIn("Runtime.getRuntime().exit", vm)
+        self.assertNotIn("getLaunchIntentForPackage", vm)
+        self.assertNotIn("import android.content.Intent", vm_file)
+
+        # Every preference the collectors watch is still written, or sync would silently stop.
+        for key in (
+            "InnerTubeCookieKey", "VisitorDataKey", "DataSyncIdKey",
+            "AccountNameKey", "AccountEmailKey", "AccountChannelHandleKey",
+        ):
+            self.assertIn(f"settings[{key}] =", vm)
+        # Nothing restarts to show the switch happened, so the user is told directly.
+        self.assertIn("R.string.account_switched", vm)
+
+        # Both call sites moved over: the saved-account list and the pasted-token advanced login.
+        self.assertEqual(2, screen.count("accountSettingsViewModel.switchAccount("))
+        # The chooser's own labels are translatable rather than hardcoded English.
+        for name, use in (
+            ("switch_accounts", screen), ("remove_account", screen),
+            ("add_another_account", screen), ("account_switched", vm),
+        ):
+            self.assertIn(f'name="{name}"', strings)
+            self.assertIn(f"R.string.{name}", use)
+        self.assertNotIn('title = "Switch Accounts"', screen)
+        self.assertNotIn('Text("Add another account")', screen)
+        self.assertNotIn('contentDescription = "Remove Account"', screen)
+        # Translated where the rest of the fork is, so the chooser is not English-only.
+        for loc in ("es", "fr", "fa", "tr"):
+            local = (MAIN / f"res/values-{loc}/strings.xml").read_text()
+            for name in ("switch_accounts", "remove_account", "add_another_account", "account_switched"):
+                self.assertIn(f'name="{name}"', local)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):
