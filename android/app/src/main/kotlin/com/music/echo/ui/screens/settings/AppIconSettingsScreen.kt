@@ -153,7 +153,19 @@ fun AppIconSettingsScreen(
           "Suggested by Falvik",
           R.mipmap.ic_launcher_sabrina2
         ),
-        AppIconOption(AppIconType.SKY, "Sky Icon", "A beautiful sky-themed icon", R.mipmap.sky_icon)
+        AppIconOption(AppIconType.SKY, "Sky Icon", "A beautiful sky-themed icon", R.mipmap.sky_icon),
+        AppIconOption(
+          AppIconType.WEB_BADGE,
+          "Web Badge",
+          "FT web badge, from the community logo art",
+          R.mipmap.web_badge_icon
+        ),
+        AppIconOption(
+          AppIconType.WEB_NOTE,
+          "Web Note",
+          "FT web note on red, from the community logo art",
+          R.mipmap.web_note_icon
+        )
       ).sortedBy { it.title.lowercase() }
 
     Column(
