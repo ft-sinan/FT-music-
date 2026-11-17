@@ -690,6 +690,17 @@ class ForkConfigurationTest(unittest.TestCase):
         resize = (ROOT / "core/src/main/kotlin/echo/music/iad1tya/ui/utils/YouTubeUtils.kt").read_text()
         self.assertIn("1200", resize)
 
+    def test_welcome_card_is_spidey_themed_and_translatable(self):
+        welcome = (MAIN / "kotlin/com/music/echo/ui/screens/WelcomeDialog.kt").read_text()
+        strings = (MAIN / "res/values/strings.xml").read_text()
+        # The premium minimal card: web line art, the community mark, translatable copy.
+        self.assertIn("SpiderWebCorner", welcome)
+        self.assertIn("R.mipmap.web_note_icon", welcome)
+        for name in ("welcome_title", "welcome_tagline", "welcome_get_started"):
+            self.assertIn(f"R.string.{name}", welcome)
+            self.assertIn(f'name="{name}"', strings)
+        self.assertNotIn('"Welcome to FT Music"', welcome)
+
     def test_ft_owned_shortcut_targets(self):
         shortcuts = ET.parse(MAIN / "res/xml/shortcuts.xml").getroot()
         for item in shortcuts.findall("shortcut/intent"):

@@ -83,3 +83,7 @@ There is no v0.7.0 — the version number skips it, because the work that was go
 **The community web note is now the default icon**
 
 - Fresh installs and everyone on the standard icon now see the red web-textured note from the community logo art. The web badge and all earlier alternates remain selectable in Settings → App icon; the welcome dialog and shared cards show the new mark too. Say the word if you want the old ring icon kept as a selectable "Classic" option.
+
+**A premium minimal welcome card**
+
+- The first-launch card is now a dark, quiet surface with the community web note in a cream hairline frame, thin spider-web line art in two corners, one tagline and a single red action - no clutter, and all of its text is translatable.
